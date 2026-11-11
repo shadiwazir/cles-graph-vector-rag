@@ -1,0 +1,9 @@
+outcomes:
+  - appeal_allowed
+  - appeal_dismissed
+  - appeal_allowed_in_part
+  - sentence_varied
+  - new_trial_ordered
+  - acquittal_set_aside
+  - remitted
+  - other

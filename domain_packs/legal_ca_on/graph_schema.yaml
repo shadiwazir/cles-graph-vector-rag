@@ -1,0 +1,49 @@
+# Node labels with their unique key property, and relationship types with direction.
+nodes:
+  Case:
+    key: case_id          # citation, e.g. "2026 ONCA 719"
+    properties: [title, decision_date, case_type, source_path, restrictions]
+  Court:
+    key: name
+  Judge:
+    key: judge_id
+    properties: [name, aliases]
+  Lawyer:
+    key: lawyer_id
+    properties: [name, aliases]
+  Party:
+    key: party_id
+    properties: [name, kind]
+  Statute:
+    key: statute_id
+    properties: [name, jurisdiction]
+  StatuteProvision:
+    key: provision_id     # e.g. "Criminal Code s. 151"
+    properties: [section, title]
+  Offence:
+    key: offence_id
+    properties: [name]
+  LegalIssue:
+    key: issue_id
+    properties: [name]
+  LegalPrinciple:
+    key: principle_id
+    properties: [name, summary]
+  Outcome:
+    key: label            # value from outcomes.yaml
+
+relationships:
+  - {type: CITES,             source: Case,             target: Case, properties: [treatment, para]}
+  - {type: DECIDED_BY_COURT,  source: Case,             target: Court}
+  - {type: SAT_ON,            source: Case,             target: Judge}
+  - {type: COUNSEL_IN,        source: Lawyer,           target: Case, properties: [side]}
+  - {type: INVOLVES,          source: Case,             target: Party, properties: [role]}
+  - {type: REPRESENTED,       source: Lawyer,           target: Party}
+  - {type: APPLIED,           source: Case,             target: StatuteProvision}
+  - {type: PART_OF,           source: StatuteProvision, target: Statute}
+  - {type: CONCERNS,          source: Case,             target: Offence}
+  - {type: RAISED,            source: Case,             target: LegalIssue}
+  - {type: RELIED_ON,         source: Case,             target: LegalPrinciple}
+  - {type: GOVERNED_BY,       source: LegalIssue,       target: LegalPrinciple}
+  - {type: RESULTED_IN,       source: Case,             target: Outcome}
+  - {type: APPEALED_FROM,     source: Case,             target: Case}

@@ -1,0 +1,18 @@
+# Cypher templates. Labels and relationships must be declared in graph_schema.yaml.
+# Every template must filter on $as_of (no later cases) - validated at load time.
+templates:
+  cases_by_provision: |
+    MATCH (c:Case)-[:APPLIED]->(p:StatuteProvision)
+    WHERE p.provision_id IN $provision_ids AND c.decision_date < $as_of
+    RETURN c.case_id AS case_id, c.title AS title, c.decision_date AS decision_date
+    ORDER BY c.decision_date DESC
+    LIMIT $limit
+  outcomes_by_issue: |
+    MATCH (c:Case)-[:RAISED]->(i:LegalIssue), (c)-[:RESULTED_IN]->(o:Outcome)
+    WHERE i.issue_id IN $issue_ids AND c.decision_date < $as_of
+    RETURN o.label AS outcome, count(c) AS cases
+    ORDER BY cases DESC
+  good_law_authorities: |
+    MATCH (c:Case)-[r:CITES]->(a:Case)
+    WHERE c.case_id IN $case_ids AND a.decision_date < $as_of
+    RETURN a.case_id AS case_id, r.treatment AS treatment

@@ -1,0 +1,2 @@
+# ob.2 Observability (ADR 0007)
+User wants full observability beyond MLflow. User tried Langfuse, Phoenix, LLM-as-judge, Jev (TypeSafe hosted typed-judge model). Phoenix accepted; web search: Dynatrace agreed to acquire Arize (Aug 2026, vendor-reported), licence claims conflict. Jev only for public/synthetic data, optional judge backend. Confidentiality concern raised by me: lawyer text in telemetry and external generator.

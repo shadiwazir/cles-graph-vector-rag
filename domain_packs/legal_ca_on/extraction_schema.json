@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Extraction result",
+  "type": "object",
+  "required": ["case_id", "title", "decision_date", "case_type", "outcome", "stages"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "title": {"type": "string"},
+    "decision_date": {"type": "string", "format": "date"},
+    "case_type": {"enum": ["criminal", "civil", "other"]},
+    "court": {"type": "string"},
+    "judges": {"type": "array", "items": {"type": "string"}},
+    "lawyers": {"type": "array", "items": {"type": "object"}},
+    "parties": {"type": "array", "items": {"type": "object"}},
+    "statute_provisions": {"type": "array", "items": {"type": "string"}},
+    "offences": {"type": "array", "items": {"type": "string"}},
+    "issues": {"type": "array", "items": {"type": "string"}},
+    "principles": {"type": "array", "items": {"type": "string"}},
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "treatment"],
+        "properties": {
+          "case_id": {"type": "string"},
+          "treatment": {
+            "enum": ["followed", "distinguished", "applied", "considered", "overruled", "cited"]
+          },
+          "para": {"type": "integer"}
+        }
+      }
+    },
+    "outcome": {"type": "string"},
+    "restrictions": {"type": "string"},
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage", "known_so_far", "next_steps"],
+        "properties": {
+          "stage": {"type": "string"},
+          "known_so_far": {"type": "string"},
+          "next_steps": {"type": "string"}
+        }
+      }
+    }
+  }
+}

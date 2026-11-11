@@ -1,0 +1,76 @@
+# Run from the repo root:  docker compose --env-file .env -f infra/docker-compose.yml up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cles_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cles_db}
+      POSTGRES_USER: ${POSTGRES_USER:-cles_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cles_admin} -d ${POSTGRES_DB:-cles_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies infra/postgres/migrations, then exits.
+  flyway:
+    image: flyway/flyway:11
+    container_name: cles_flyway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./postgres/migrations:/flyway/sql:ro
+    command: >
+      -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cles_db}
+      -user=${POSTGRES_USER:-cles_admin}
+      -password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      -connectRetries=10
+      migrate
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: cles_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}
+    ports:
+      - "7474:7474"   # HTTP
+      - "7687:7687"   # Bolt
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD} 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  # Only needed for training: docker compose --profile training up -d mlflow
+  mlflow:
+    profiles: ["training"]
+    build: ./mlflow
+    container_name: cles_mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-cles_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/mlflow
+      --default-artifact-root /mlflow/artifacts
+
+volumes:
+  pgdata:
+  neo4j_data:
+  mlflow_artifacts:

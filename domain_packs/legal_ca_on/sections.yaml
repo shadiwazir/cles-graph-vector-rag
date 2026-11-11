@@ -1,0 +1,6 @@
+# Hints for splitting a decision into sections. Refined on real data.
+paragraph_marker: '^\[(\d+)\]'
+running_noise:
+  - '^Page:\s*\d+\s*$'
+heading_pattern: '^[A-Z]\.\s+[A-Z][A-Z ,\-]+$'   # e.g. "A. INTRODUCTION"
+section_types: [introduction, facts, procedural_history, issues, analysis, disposition, other]

@@ -1,0 +1,2 @@
+# ar.2 Flyway (ADR 0004)
+User used Flyway before, asked about Flyway/pyway. pyway last release found April 2024 via third-party aggregator (unverified). Found gap in my INSTRUCTIONS: initdb scripts run once only. User agreed: Flyway Docker one-shot, no Neo4j tool (reload graph from extractions). V1 includes HNSW index (kept faithful to INSTRUCTIONS 6.1 SQL); bulk-load stage should drop/recreate index around loading (Phase 1 task, build_indexes stage).

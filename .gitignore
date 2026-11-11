@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+.dvc/config.local
+.dvc/tmp/
+.dvc/cache/
+/artifacts/
+*.egg-info/
+/data

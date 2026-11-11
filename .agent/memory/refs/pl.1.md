@@ -1,0 +1,2 @@
+# pl.1 Orchestration (ADR 0005)
+User owns flowlit/flowlit-integration (PyPI). flowlit: YAML DAG, asyncio, in-memory only, v0.5.0. flowlit-integration: reusable executors, no business logic. User wants flowlit on a parallel path, not main path, to avoid compounding failure risk. Future MLOps loop vision: load new data, train, compare with champion, decide publish; manual vs automatic undecided. See flowlit-suite.md.

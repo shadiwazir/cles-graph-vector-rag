@@ -1,0 +1,2 @@
+# ml.2 Stage cuts and leakage (ADR 0008)
+User's product vision: lawyer presents case at any stage, system advises routes/next steps, fine-tuned SLM + RAG context; correctness matters (fluent != valid in court). Leakage question from user: what to do since fine-tuning purpose is to teach behaviour. Answer: input only pre-decision info, target = reasoning+outcome; time-based split; retrieval excludes self and later cases (RAFT style).

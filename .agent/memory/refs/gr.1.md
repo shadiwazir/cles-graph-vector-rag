@@ -1,0 +1,2 @@
+# gr.1 Domain packs (ADR 0002)
+User wanted Graph DB as dynamic structure adaptable to any domain. I explained the pack is bigger than the graph (prompts, CoT template, outcomes, section hints, Cypher templates). Cypher labels cannot be parameters -> whitelist builder. Pack loader validates templates and requires $as_of (leakage rule L3). legal_ca_on pack is a v0 skeleton, to be refined on real data.

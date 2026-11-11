@@ -1,0 +1,36 @@
+[project]
+name = "cles"
+version = "0.1.0"
+description = "Cognitive Legal Expert System: pgvector + Neo4j retrieval and a fine-tuned SLM."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+    "jsonschema>=4.22",
+]
+
+[project.scripts]
+cles = "cles.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.5", "dvc>=3.50"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cles"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

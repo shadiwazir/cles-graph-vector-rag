@@ -66,13 +66,46 @@ class GraphSchema(BaseModel):
         return self
 
 
+class MetadataConfig(BaseModel):
+    title_pattern: str
+    date_pattern: str
+    date_format: str
+
+
+class SectionConfig(BaseModel):
+    """How to read a document: paragraph markers, noise, headings, metadata."""
+
+    paragraph_marker: str
+    noise_lines: list[str] = Field(default_factory=list)
+    heading_pattern: str | None = None
+    heading_title_pattern: str | None = None
+    section_keywords: dict[str, list[str]] = Field(default_factory=dict)
+    metadata: MetadataConfig
+
+    @model_validator(mode="after")
+    def _patterns_compile(self) -> "SectionConfig":
+        patterns = [
+            self.paragraph_marker,
+            *self.noise_lines,
+            self.metadata.title_pattern,
+            self.metadata.date_pattern,
+        ]
+        patterns += [p for p in (self.heading_pattern, self.heading_title_pattern) if p]
+        for pattern in patterns:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"invalid regex {pattern!r}: {exc}") from exc
+        return self
+
+
 @dataclass(frozen=True)
 class DomainPack:
     path: Path
     info: PackInfo
     graph: GraphSchema
     outcomes: list[str]
-    sections: dict
+    sections: SectionConfig
     query_templates: dict[str, str]
     extraction_schema: dict
     advice_schema: dict
@@ -92,6 +125,7 @@ def load_pack(packs_dir: Path, name: str) -> DomainPack:
     try:
         info = PackInfo(**_yaml(path / "pack.yaml"))
         graph = GraphSchema(**_yaml(path / "graph_schema.yaml"))
+        sections = SectionConfig(**_yaml(path / "sections.yaml"))
     except ValueError as exc:
         raise PackError(f"pack '{name}': {exc}") from exc
 
@@ -116,7 +150,7 @@ def load_pack(packs_dir: Path, name: str) -> DomainPack:
         info=info,
         graph=graph,
         outcomes=outcomes,
-        sections=_yaml(path / "sections.yaml"),
+        sections=sections,
         query_templates=templates,
         extraction_schema=schemas["extraction_schema.json"],
         advice_schema=schemas["advice_schema.json"],

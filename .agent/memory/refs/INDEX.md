@@ -27,6 +27,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [ml.1] | Fine-tuning stack | ADR 0003 |
 | [ml.2] | Stage cuts and leakage | ADR 0008 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |
+| [da.1] | Parser and chunker design | docs/03 |
 | [ob.1] | DVC data versioning | ADR 0006 |
 | [ob.2] | Observability and judges | ADR 0007 |
 | [rt.1] | Citation verification | ADR 0009 |

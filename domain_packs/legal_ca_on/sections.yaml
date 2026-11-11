@@ -1,6 +1,31 @@
-# Hints for splitting a decision into sections. Refined on real data.
-paragraph_marker: '^\[(\d+)\]'
-running_noise:
-  - '^Page:\s*\d+\s*$'
-heading_pattern: '^[A-Z]\.\s+[A-Z][A-Z ,\-]+$'   # e.g. "A. INTRODUCTION"
-section_types: [introduction, facts, procedural_history, issues, analysis, disposition, other]
+# How to read a decision. Refined on real data.
+
+# Numbered paragraphs, e.g. "[12]" alone on a line or followed by text.
+paragraph_marker: '^\[(\d+)\]\s*(.*)$'
+
+# Lines removed before parsing (page headers, signatures, release line).
+noise_lines:
+  - '^\s*Page:\s*\d+\s*$'
+  - '^\s*Released:.*$'
+  - '^\s*[“"].*J\.A\.[”"]\s*$'
+  - '^\s*[“"]I agree.*$'
+
+# Section headings in capitals, either "III. ANALYSIS" on one line or "A." followed by a title line.
+# heading_pattern group 1 is the title when present on the same line.
+heading_pattern: '^\s*(?:[A-Z]|[IVX]+)\.\s*([A-Z][A-Z ,\-''\u2019()]+)?\s*$'
+heading_title_pattern: '^\s*[A-Z][A-Z ,\-''\u2019()]+\s*$'
+
+# Heading words -> section type (first match wins; anything else is "other").
+section_keywords:
+  introduction: [introduction, overview]
+  facts: [background, facts, factual]
+  procedural_history: [proceedings, procedural, history, below]
+  issues: [issue, grounds, positions]
+  analysis: [analysis, discussion]
+  disposition: [disposition, conclusion]
+
+# Document metadata read from the first page.
+metadata:
+  title_pattern: 'CITATION:\s*(.+?),\s*\d{4}\s+ONCA'
+  date_pattern: 'DATE:\s*(\d{8})'
+  date_format: '%Y%m%d'

@@ -20,6 +20,17 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | DVC initialised with local remote (`~/dvc-store/cles`), `data/` tracked | done |
 | `build_manifest` table | done (in V1) |
 
+## Phase 1: Ingestion
+
+| Task | Status |
+|------|--------|
+| Parser with tests on the 15 sample PDFs | done |
+| Chunker (parent/child) and tests | done |
+| Idempotent Postgres ingestion with quarantine | done |
+| Embedder and resumable `embed` stage | done |
+| `build_indexes` stage | done |
+| Validate the parser on a larger random sample of real files | waiting for the user's files |
+
 ## Later phases
 
 See `INSTRUCTIONS.md` section 15.

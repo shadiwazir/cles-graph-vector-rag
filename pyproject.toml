@@ -9,7 +9,13 @@ dependencies = [
     "pydantic-settings>=2.3",
     "pyyaml>=6.0",
     "jsonschema>=4.22",
+    "pymupdf>=2.1",
+    "psycopg[binary]>=3.3.8",
+    "pgvector>=0.5.1",
 ]
+
+[project.optional-dependencies]
+embed = ["sentence-transformers>=3"]
 
 [project.scripts]
 cles = "cles.cli:main"

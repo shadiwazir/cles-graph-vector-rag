@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_model: str = "BAAI/bge-base-en-v1.5"
     embedding_device: Literal["auto", "cpu", "cuda"] = "auto"
+    embedding_batch_size: int = 32
 
     # Project
     domain_pack: str = "legal_ca_on"

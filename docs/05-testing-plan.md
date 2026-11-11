@@ -19,6 +19,13 @@ Run: `uv run pytest`, `uv run ruff check .`.
 - Compose fails with a clear message if a password is unset.
 - `uv run cles run validate_pack` prints a JSON summary with `status: ok`.
 
+## Phase 1 acceptance
+
+- All sample PDFs parse with a title and date; child chunks never exceed 400 estimated tokens.
+- `cles run ingest` twice: the second run reports every file as `unchanged`.
+- After `embed` and `build_indexes`, every child chunk has a 768-dimension embedding and the HNSW index exists.
+- `tests/test_store_integration.py` needs the Compose Postgres and is skipped when it is unreachable.
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

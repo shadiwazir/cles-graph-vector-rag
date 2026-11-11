@@ -34,7 +34,13 @@ flowchart LR
 | `stage.py` | Stage contract: args, JSON summary, exit code | done |
 | `cli.py` | `cles run <stage...>` thin runner | done |
 | `domain/pack.py`, `domain/check.py` | Pack loader and validator; `validate_pack` stage | done |
-| `ingestion/`, `extraction/`, `graph/` | Phases 1 and 2 | planned |
+| `ingestion/parser.py` | PDF text to `ParsedDocument` (paragraphs, sections, metadata) using the pack's `sections.yaml` | done |
+| `ingestion/chunker.py` | Parent (section) and child (at most 400 tokens) chunks with deterministic ids | done |
+| `ingestion/store.py`, `ingest.py` | Idempotent write of documents and chunks; `ingest` stage with quarantine | done |
+| `ingestion/embedder.py`, `embed.py` | bge-base embeddings (`cpu`/`cuda`/`auto`); `embed` stage, resumable | done |
+| `ingestion/indexes.py`, `build_indexes.py` | HNSW index create/drop; `build_indexes` stage | done |
+| `db.py` | Connection and `recorded_run` (writes `ingestion_runs`) | done |
+| `extraction/`, `graph/` | Phase 2 | planned |
 | `retrieval/`, `inference/`, `evaluation/` | Phase 3 | planned |
 | `training/` | Phases 4 and 5 | planned |
 
@@ -57,3 +63,23 @@ flowchart LR
 ## Stage contract
 
 Each stage is `python -m cles.<module>` with `--limit`, `--dry-run`, `--run-id`; it logs to stderr, prints one JSON summary line to stdout and exits non-zero on failure. Stages are registered in `cli.STAGES`.
+
+## Ingestion (Phase 1)
+
+```mermaid
+flowchart LR
+    PDF[data/*.pdf] --> P[parse_pdf] --> C[build_chunks] --> S[store_document]
+    S --> D[(documents)]
+    S --> CH[(chunks, no embedding)]
+    CH --> E[embed stage] --> CH2[(chunks with vectors)]
+    CH2 --> B[build_indexes] --> I[HNSW index]
+```
+
+Commands: `cles run ingest embed build_indexes` (all accept `--limit`, `--dry-run`).
+
+- `doc_id` is the file name (`2026_ONCA_719.pdf` becomes `2026 ONCA 719`); the citation line inside the PDF is unreliable (footnote digits get glued on).
+- Re-running `ingest` skips unchanged files (`content_hash`), replaces a changed file, and reports a file with identical content under another name as a duplicate.
+- A PDF that fails to parse is quarantined: listed in the stage summary and `ingestion_runs.stats`, and the run continues.
+- `embed` drops the HNSW index when more than 1000 chunks are pending; `build_indexes` recreates it.
+- Chunk sizes use a cheap token estimate (about 1.3 per word); the embedder truncates at 512 tokens.
+- Known gaps: footnotes stay inside paragraph text; only all-caps headings are detected; scanned PDFs are rejected (no OCR yet).

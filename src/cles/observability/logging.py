@@ -43,6 +43,8 @@ def setup_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
+    for noisy in ("httpx", "httpx2", "httpcore", "huggingface_hub", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def redact(text: str, mode: CaptureMode) -> str:

@@ -12,6 +12,9 @@ import uuid
 # Stage name -> module. Add a stage here when it exists.
 STAGES: dict[str, str] = {
     "validate_pack": "cles.domain.check",
+    "ingest": "cles.ingestion.ingest",
+    "embed": "cles.ingestion.embed",
+    "build_indexes": "cles.ingestion.build_indexes",
 }
 
 

@@ -69,6 +69,17 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | Add the dataset to DVC | done (`artifacts/datasets.dvc`) |
 | Stage-aware advice for early stages (ADR 0015) | done, dataset rebuilt (59 examples) |
 
+## Phase 5: Fine-tuning
+
+| Task | Status |
+|------|--------|
+| Live GPU price comparison and base-model options | done (third-party figures, in the runbook) |
+| `train_sft` stage, configs, dry run, leakage re-check, MLflow lineage | done |
+| CPU smoke test of the whole pipeline (0.5B model, 2 steps, adapter saved, run logged) | done (58 min on CPU) |
+| Unsloth backend, vLLM serving | written, not runnable on the laptop; to be verified on the GPU machine |
+| Throughput pilot, real training run | waiting for the real corpus (data building about $500) and the user's provider and model choice |
+| Cloud DVC remote | postponed (rsync for now, ADR 0016) |
+
 ## Later phases
 
 See `INSTRUCTIONS.md` section 15.

@@ -10,3 +10,7 @@ __pycache__/
 /artifacts/eval/
 *.egg-info/
 /data
+/artifacts/runs/
+/artifacts/mlruns/
+/artifacts/mlflow.db
+/mlartifacts/

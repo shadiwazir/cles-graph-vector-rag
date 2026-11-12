@@ -140,3 +140,8 @@
 - Done: answered the user's side question about Docling. Tested docling 2.150.0 in an isolated scratch venv on 3 sample PDFs; results in refs da.2. No project code or dependencies changed.
 - Files affected: .agent/memory/refs/da.2.md, refs/INDEX.md, .agent/history.md.
 - Pending: user commit of section 8 sync (staged), Phase 4 sign-off, then Phase 5.
+
+## 2026-11-17 Phase 5 built (fine-tuning)
+- Done: user approved Phase 5. Research (GPU prices, base models, Unsloth/vLLM versions), token statistics of the dataset (mean 5.1k, max 6.9k), train group (trl, peft, datasets, accelerate, mlflow), configs, sft_config/sft_data/train_sft, leakage re-check, MLflow lineage, dry-run template preview, trusted_generator_hosts and llm_extra_body settings, vLLM serve profile, runbook, ADR 0016, docs 03-05, refs ml.5. CPU smoke test passed (58 min). Tests added (tests/test_sft.py).
+- Files affected: configs/sft/*, src/cles/training/{sft_config,sft_data,train_sft}.py, src/cles/{config,cli}.py, src/cles/inference/guard.py, src/cles/llm/openai_client.py, infra/docker-compose.yml, docs/*, tests/test_sft.py, pyproject.toml, uv.lock, .gitignore, .env.example.
+- Pending: user commit; decisions on base model and provider for the real run (after the real corpus is processed); Phase 5 sign-off; Phase 6.

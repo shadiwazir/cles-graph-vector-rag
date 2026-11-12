@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     openai_api_key: SecretStr | None = None
     allow_external_generator: bool = False
+    # Extra JSON fields sent with every chat request, e.g. {"chat_template_kwargs":
+    # {"enable_thinking": false}} for Qwen3 models served by vLLM.
+    llm_extra_body: dict = Field(default_factory=dict)
     llm_concurrency: int = 4
     llm_timeout_seconds: float = 600  # slow local models need more
     # Prices change, so they are settings and not code. Without them, cost is not computed.
@@ -58,6 +61,11 @@ class Settings(BaseSettings):
     evidence_strong_distance: float = 0.35  # cosine distance
     evidence_weak_distance: float = 0.45
 
+    sft_config: Path = Path("configs/sft/qwen3_8b_qlora.yaml")
+    # Hosts we control that may receive case text besides localhost (for example a rented GPU
+    # running the fine-tuned model). Comma-separated in the environment.
+    trusted_generator_hosts: list[str] = Field(default_factory=list)
+
     # Training data
     training_eval_fraction: float = 0.1  # newest share of documents held out for evaluation
     training_out_dir: Path = Path("artifacts/datasets")
@@ -70,6 +78,7 @@ class Settings(BaseSettings):
 
     # Tracking and telemetry
     mlflow_tracking_uri: str = "http://localhost:5000"
+    mlflow_registered_model: str | None = None  # register the adapter under this name when set
     telemetry_enabled: bool = False  # export traces and metrics to the OTLP endpoint
     otel_exporter_otlp_endpoint: str = "http://localhost:4318"  # OTLP over HTTP
     telemetry_capture_content: Literal["none", "redacted", "full"] = "redacted"

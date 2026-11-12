@@ -121,9 +121,42 @@ services:
     depends_on:
       - prometheus
 
+  # Serve the fine-tuned model (needs an NVIDIA GPU and the NVIDIA container toolkit):
+  # Set BASE_MODEL (default Qwen/Qwen3-8B, must equal the base the adapter was trained from) and
+  # ADAPTER_DIR (the run folder that contains adapter/):
+  #   BASE_MODEL=Qwen/Qwen3-8B ADAPTER_DIR=./artifacts/runs/<id> \
+  #     docker compose --profile serve up -d vllm
+  # OpenAI-compatible endpoint on :8000; the adapter is served under the model name "cles".
+  vllm:
+    profiles: ["serve"]
+    image: vllm/vllm-openai:v0.33.0
+    container_name: cles_vllm
+    command: >
+      --model ${BASE_MODEL:-Qwen/Qwen3-8B}
+      --enable-lora
+      --lora-modules cles=/runs/adapter
+      --max-lora-rank 64
+      --max-model-len ${MAX_MODEL_LEN:-12288}
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ${ADAPTER_DIR:-./adapter-not-set}:/runs:ro
+      - hf_cache:/root/.cache/huggingface
+    ports:
+      - "8000:8000"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 volumes:
   pgdata:
   neo4j_data:
   mlflow_artifacts:
   phoenix_data:
   grafana_data:
+  hf_cache:

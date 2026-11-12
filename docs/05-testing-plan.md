@@ -50,6 +50,15 @@ Run: `uv run pytest`, `uv run ruff check .`.
 
 - Stage-aware advice: early-stage routes may omit `expected_outcome`, later stages must have it; `stage` equals the example's stage; early first-route names that read as an appeal result are rejected; likelihood is capped by evidence and by stage.
 
+## Phase 5 acceptance
+
+- Config: shipped YAML files load; parameters flatten for tracking.
+- Data: prompt-completion split; over-long examples are dropped and counted, not truncated; estimate needs a configured throughput.
+- Safety: `train_sft` refuses a dataset that breaks a leakage rule; the guard allows case text only to localhost and to hosts listed in `TRUSTED_GENERATOR_HOSTS`.
+- Dry run on the sample dataset prints token statistics and the chat-template rendering (prompt end and answer start).
+- CPU smoke run: finishes, saves an adapter, logs params, lineage tags, loss metrics and artifacts to MLflow.
+- On the GPU machine (not testable here): Unsloth run completes; a 100-step pilot gives tokens per second; vLLM serves the adapter as `cles`; the API answers through it.
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

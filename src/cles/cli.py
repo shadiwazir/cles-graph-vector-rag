@@ -21,6 +21,7 @@ STAGES: dict[str, str] = {
     "evaluate": "cles.evaluation.run",
     "build_dataset": "cles.training.build_dataset",
     "check_dataset": "cles.training.check_dataset",
+    "train_sft": "cles.training.train_sft",
 }
 
 

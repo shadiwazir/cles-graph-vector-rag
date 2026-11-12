@@ -1,0 +1,22 @@
+{
+  "run_id": "40a8d9fb10374c8b97fc1955940d112a",
+  "pack": "legal_ca_on",
+  "pack_version": "0.2.0",
+  "extraction_version": "0.2.0-74604823",
+  "target_model": "gpt-5.4-mini",
+  "split_date": "2026-10-09",
+  "eval_fraction": 0.1,
+  "files": {
+    "train": {
+      "examples": 47,
+      "sha256": "1da069d5a0c5789b4df56f5254ee965c058698e022d667579714dc5591d82c65"
+    },
+    "eval": {
+      "examples": 12,
+      "sha256": "fd5be10b634b88754d5a77433553afc471f702222110d6f87e77b568dc7bce7e"
+    }
+  },
+  "dropped_for_leakage": {},
+  "missing_targets": 0,
+  "cost_usd_this_run": 0.09957674999999999
+}

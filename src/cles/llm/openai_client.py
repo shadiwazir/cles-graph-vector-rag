@@ -5,10 +5,18 @@ from cles.llm.base import LLMClient, LLMResponse
 
 
 class OpenAIChatClient:
-    def __init__(self, model: str, api_key: str, base_url: str, timeout: float = 600):
+    def __init__(
+        self,
+        model: str,
+        api_key: str,
+        base_url: str,
+        timeout: float = 600,
+        extra_body: dict | None = None,
+    ):
         from openai import OpenAI  # imported here so tests and dry runs need no key
 
         self.model = model
+        self._extra_body = extra_body or None
         self._client = OpenAI(
             api_key=api_key, base_url=base_url, timeout=timeout
         )  # SDK retries transient errors
@@ -17,7 +25,10 @@ class OpenAIChatClient:
         # json_object mode is the common denominator across compatible providers; the caller
         # validates the result against the JSON Schema itself.
         reply = self._client.chat.completions.create(
-            model=self.model, messages=messages, response_format={"type": "json_object"}
+            model=self.model,
+            messages=messages,
+            response_format={"type": "json_object"},
+            extra_body=self._extra_body,
         )
         usage = reply.usage
         return LLMResponse(
@@ -40,4 +51,5 @@ def make_client(settings: Settings) -> LLMClient:
         settings.openai_api_key.get_secret_value(),
         settings.llm_base_url,
         settings.llm_timeout_seconds,
+        settings.llm_extra_body,
     )

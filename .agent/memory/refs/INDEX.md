@@ -32,6 +32,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [rt.3] | Phase 3 build notes | ADR 0013, docs/03 |
 | [ml.3] | Training data build | ADR 0014, docs/03 |
 | [ml.4] | Stage-aware advice (option B) | ADR 0015, docs/03 |
+| [ml.5] | Phase 5 fine-tuning build notes | ADR 0016, docs/06 |
 | [ml.1] | Fine-tuning stack | ADR 0003 |
 | [ml.2] | Stage cuts and leakage | ADR 0008 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |

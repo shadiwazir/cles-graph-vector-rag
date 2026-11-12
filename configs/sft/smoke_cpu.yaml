@@ -1,0 +1,20 @@
+# Tiny CPU smoke test of the training pipeline (data, trainer, MLflow, adapter saving).
+# Not a real training run: uses a 0.5B model without quantization and 2 steps.
+name: smoke-cpu
+backend: plain
+base_model: Qwen/Qwen2.5-0.5B-Instruct
+load_in_4bit: false
+max_seq_length: 8192
+enable_thinking: false
+lora: {r: 8, alpha: 16, dropout: 0.0, target_modules: [q_proj, v_proj]}
+epochs: 1
+max_steps: 2
+learning_rate: 2.0e-4
+per_device_batch_size: 1
+grad_accum_steps: 1
+logging_steps: 1
+eval_steps: 2
+save_steps: 1000
+eval_max_examples: 2
+train_max_examples: 4
+bf16: false

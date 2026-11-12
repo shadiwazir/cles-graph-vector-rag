@@ -185,3 +185,20 @@ Commands: `cles run build_dataset` (`--dry-run` retrieves and estimates cost; `-
 Cached targets are re-checked on every build with the current rules, so tightening a rule regenerates only the affected examples. The dataset folder is tracked with DVC (`artifacts/datasets.dvc`).
 
 Stage-aware advice (ADR 0015): the advice JSON has a `stage` and each route a `next_event`; `expected_outcome` is optional before a decision exists and required afterwards. Likelihood is capped by evidence and by stage (`likelihood_caps_by_stage` in `pack.yaml`). At early stages the dataset builder rejects first-route names that read as an appeal result (`early_route_name_patterns` in `training.yaml`).
+
+## Fine-tuning and serving (Phase 5)
+
+```mermaid
+flowchart LR
+    D[artifacts/datasets/id] -->|rsync| G[rented GPU machine]
+    CFG[configs/sft/*.yaml] --> T
+    G --> V{leakage L1-L5 re-check}
+    V -->|clean| T[train_sft: Unsloth + TRL QLoRA, loss on advice only]
+    T --> M[(MLflow: SQLite file on the machine)]
+    T --> A[adapter + config + dataset manifest]
+    A -->|rsync + dvc add| H[home: artifacts/runs/id]
+    H --> S[vLLM --enable-lora, model name cles]
+    S -->|OpenAI-compatible, TRUSTED_GENERATOR_HOSTS| API[FastAPI /advise]
+```
+
+Stage `train_sft` (`--dry-run`: leakage re-check, token statistics, template preview, time and cost estimate when `estimate:` is set in the config). Config: `configs/sft/qwen3_8b_qlora.yaml`; `plain` backend and `smoke_cpu.yaml` for pipeline smoke tests. Lineage tags on every MLflow run: git commit, DVC hashes, dataset hashes, pack version, base model. Serving profile `serve` (vLLM v0.33.0). Steps and budget: `docs/06-training-runbook.md`. Design: ADR 0016.

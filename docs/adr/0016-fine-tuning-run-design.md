@@ -1,0 +1,18 @@
+# 0016. Fine-tuning run design: model, sequence length, tracking and data transfer [ml.5]
+
+**Status:** accepted (base model and provider confirmed per run)
+
+**Context.** Phase 5 turns the training dataset into a LoRA adapter on a rented GPU. Decisions needed: base model, sequence length, loss masking, where experiment tracking lives when the machine is rented, how the dataset gets there, and how the adapter reaches the API.
+
+**Decisions.**
+1. **Framework:** Unsloth + TRL `SFTTrainer` (ADR 0003), 4-bit QLoRA, adapter only. A `plain` backend (transformers + peft, no quantization) exists for CPU smoke tests; Unsloth itself cannot be exercised on the development laptop.
+2. **Base model:** default `Qwen/Qwen3-8B` (reported Apache 2.0, long context, strong for its size; licence to be confirmed on the model card). Alternatives kept one line away in the config: `Qwen/Qwen2.5-7B-Instruct` (Apache 2.0, simpler chat template), `meta-llama/Llama-3.1-8B-Instruct` (Llama community licence). Qwen3 is trained with thinking disabled (`enable_thinking: false`); the chat template then renders an empty thinking block after the prompt and the answer follows, which matches inference when the request sets the same flag (`LLM_EXTRA_BODY`). The dry run prints this rendering so it is checked before paying for a run.
+3. **Sequence length 8192**, not the 16384 suggested in the spec: measured on the sample dataset, examples average 5.1k tokens (prompt 4.2k, answer 1.0k) and the longest is 6.9k; the prompt is bounded by the retrieval settings. Longer examples are dropped and counted, never truncated, because cutting an example cuts its answer. Re-measure on the real dataset.
+4. **Loss masking:** prompt-completion format; the loss is computed on the advice only.
+5. **Hyperparameters (start):** LoRA r 64, alpha 128, dropout 0, all attention and MLP projections; learning rate 2e-4 cosine, warmup 3 percent, 2 epochs, effective batch 16 sequences, bf16. To be tuned with a pilot and the evaluation split.
+6. **Refuse unsafe data:** `train_sft` re-checks leakage rules L1 to L5 on the dataset files before loading any model.
+7. **Tracking location:** each GPU machine uses a local SQLite MLflow backend (`sqlite:///artifacts/mlflow.db`, artifacts beside it); MLflow 3 deprecates the plain file store. After the run, the run folder and the database are copied home and the run folder is added to DVC. No tracking server has to be reachable from the rented machine. Every run carries lineage tags: git commit, DVC hashes of raw data and datasets, dataset file hashes, pack version, base model. Registering the adapter in a model registry is optional (`MLFLOW_REGISTERED_MODEL`) and is done where a registry server runs.
+8. **Dataset transfer:** `rsync` of the dataset folder for the first runs. A cloud DVC remote (bucket or DagsHub, see ADR 0006) is postponed until runs happen regularly; it needs only a change in `.dvc/config`.
+9. **Serving:** vLLM with the adapter as a LoRA module (`--lora-modules cles=...`) in the Compose profile `serve`, giving an OpenAI-compatible endpoint, so the existing client works unchanged. A host we control is listed in `TRUSTED_GENERATOR_HOSTS`; the confidentiality guard then allows case text to go there but still blocks any other external host.
+
+**Consequences.** A real run needs the real corpus first: extraction and target generation cost far more than the GPU (see the estimate in the runbook and memory). The throughput figure used for time and cost estimates is not measured; the pilot run replaces the assumption. The adapter is trained on the 4-bit base and served on the 16-bit base, a small known mismatch to check in evaluation.

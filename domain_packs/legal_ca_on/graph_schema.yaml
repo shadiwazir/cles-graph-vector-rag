@@ -2,7 +2,8 @@
 nodes:
   Case:
     key: case_id          # citation, e.g. "2026 ONCA 719"
-    properties: [title, decision_date, case_type, source_path, restrictions]
+    properties: [title, decision_date, case_type, source_path, restrictions, in_corpus]
+    indexes: [decision_date]
   Court:
     key: name
   Judge:
@@ -30,7 +31,9 @@ nodes:
     key: principle_id
     properties: [name, summary]
   Outcome:
-    key: label            # value from outcomes.yaml
+    key: label            # disposition, value from outcomes.yaml
+  Remedy:
+    key: label            # value from the remedies list in outcomes.yaml
 
 relationships:
   - {type: CITES,             source: Case,             target: Case, properties: [treatment, para]}
@@ -46,4 +49,5 @@ relationships:
   - {type: RELIED_ON,         source: Case,             target: LegalPrinciple}
   - {type: GOVERNED_BY,       source: LegalIssue,       target: LegalPrinciple}
   - {type: RESULTED_IN,       source: Case,             target: Outcome}
+  - {type: ORDERED,           source: Case,             target: Remedy}
   - {type: APPEALED_FROM,     source: Case,             target: Case}

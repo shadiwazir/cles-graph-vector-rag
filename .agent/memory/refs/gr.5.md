@@ -1,0 +1,7 @@
+# gr.5 Disposition/remedy split (ADR 0012)
+- Trigger: review of gpt-5.4-mini run (gr.4): outcome label mixed disposition and remedy; 719/726/727 (all appeals allowed) were labelled sentence_varied/remitted. INSTRUCTIONS 5.1 already says a case may carry a result and a remedy. User approved doing it now.
+- Implementation: outcomes.yaml -> `outcomes` (4 dispositions) + `remedies` (9); Remedy node and ORDERED edge; extraction schema field `remedies` + enums; pack version 0.2.0; query template remedies_by_issue; advice schema optional expected_remedies; PackError checks uniqueness; tests incl. Remedy node and dismissed+remedies rejected.
+- Run 1 (prompt v2, no schema rule): 15/15 ok, $0.163. Errors: 719 labelled sentence_reduced (really increased, Crown appeal 2y -> 4y), 716 dismissed but order_varied (costs order), 728 order_set_aside instead of acquittal_set_aside; 722 remedies absent.
+- Fix: prompt rules for direction/costs/acquittals + JSON Schema if/then (dismissed => remedies maxItems 0). Run 2: 15/15 ok, $0.209; 719 sentence_increased, 716 [], 728 acquittal_set_aside + new_trial_ordered, 715 same. Total spent on this feature ~$0.37 (+ earlier $0.22).
+- Open soft spots for the user's review: 727 and 717 labelled appeal_allowed_in_part (727 text says "the appeal is allowed, sentence varied to four years"; 717 sentence reduced by one year) - arguable; no deterministic check for sentence direction.
+- Graph rebuilt from the 15 v0.2.0 extractions after wiping.

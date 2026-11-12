@@ -1,0 +1,67 @@
+{
+  "case_id": "2026 ONCA 724",
+  "title": "Bradley Court Limited v. Tinkasimire",
+  "decision_date": "2026-10-06",
+  "case_type": "civil",
+  "court": "Court of Appeal for Ontario",
+  "judges": [
+    "Favreau",
+    "Madsen",
+    "Osborne"
+  ],
+  "lawyers": [
+    {
+      "name": "Brock Turville",
+      "side": "respondent"
+    }
+  ],
+  "parties": [
+    {
+      "name": "Bradley Court Limited",
+      "role": "plaintiff (respondent)",
+      "kind": "organization"
+    },
+    {
+      "name": "Christopher Tinkasimire",
+      "role": "defendant (appellant)",
+      "kind": "person"
+    }
+  ],
+  "statute_provisions": [
+    "Rules of Civil Procedure r. 2.1"
+  ],
+  "issues": [
+    "dismissal of a frivolous, vexatious or abusive appeal under r. 2.1"
+  ],
+  "citations": [
+    {
+      "case_id": "2015 ONCA 733",
+      "treatment": "applied",
+      "para": 3
+    },
+    {
+      "case_id": "2014 ONSC 6497",
+      "treatment": "cited",
+      "para": 8
+    },
+    {
+      "case_id": "2024 ONCA 347",
+      "treatment": "cited",
+      "para": 8
+    }
+  ],
+  "outcome": "appeal_dismissed",
+  "stages": [
+    {
+      "stage": "facts",
+      "known_so_far": "Bradley Court Limited sued Christopher Tinkasimire in the Superior Court of Justice, and he brought a counterclaim against it.",
+      "next_steps": "The motion judge dismissed the counterclaim under r. 2.1."
+    },
+    {
+      "stage": "lower_court_decision",
+      "known_so_far": "Bradley Court Limited sued Christopher Tinkasimire in the Superior Court of Justice, and he brought a counterclaim against it. Justice Centa dismissed the counterclaim under r. 2.1 as rambling and disclosing no cause of action.",
+      "next_steps": "Mr. Tinkasimire appealed; the registrar gave notice that dismissal under r. 2.1 was being considered."
+    }
+  ],
+  "remedies": []
+}

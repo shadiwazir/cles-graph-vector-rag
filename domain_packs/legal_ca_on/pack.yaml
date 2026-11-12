@@ -1,4 +1,15 @@
 name: legal_ca_on
-version: 0.1.0
+version: 0.2.0
 language: en
 description: Ontario court decisions (first corpus - Court of Appeal for Ontario).
+known_fields: {case_id: doc_id, title: title, decision_date: doc_date}
+# "known so far" text must not describe what the Court of Appeal decided.
+leak_check:
+  list_field: stages
+  text_field: known_so_far
+  patterns:
+    - '(?i)\bcourt of appeal\b.{0,40}\b(dismiss|allow|uphold|upheld|set aside|find|found|hold|held|rul|order|grant|determin|conclud|vari|increas|agree)'
+    - '(?i)\b(this|the) court\b.{0,20}\b(dismiss|allow|uphold|upheld|set aside|find|found|rul|conclud|vari|increas|agree)'
+    - '(?i)\bappeals?\b.{0,15}\b(is|are|was|were|has been|have been)\b.{0,15}\b(dismissed|allowed|granted|successful)'
+    - '(?i)\bnew trial\b.{0,20}\b(is|was|will be|has been)\b.{0,10}\bordered'
+    - '(?i)\b(i|we) would (allow|dismiss)\b'

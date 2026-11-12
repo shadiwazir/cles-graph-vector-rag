@@ -1,9 +1,18 @@
+# The disposition of the appeal (what the court decided) ...
 outcomes:
   - appeal_allowed
   - appeal_dismissed
   - appeal_allowed_in_part
-  - sentence_varied
+  - other
+
+# ... and the remedies it ordered as a result (a list; empty when the appeal is dismissed).
+remedies:
+  - sentence_increased
+  - sentence_reduced
   - new_trial_ordered
+  - acquittal_entered
   - acquittal_set_aside
   - remitted
-  - other
+  - order_varied
+  - order_set_aside
+  - leave_to_appeal_granted

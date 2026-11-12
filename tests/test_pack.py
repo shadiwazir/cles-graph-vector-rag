@@ -11,6 +11,7 @@ def test_legal_pack_loads():
     pack = load_pack(PACKS, "legal_ca_on")
     assert "Case" in pack.graph.nodes
     assert "appeal_allowed" in pack.outcomes
+    assert "new_trial_ordered" in pack.remedies
     assert pack.query_templates
 
 

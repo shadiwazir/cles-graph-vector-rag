@@ -8,6 +8,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field, model_validator
 REQUIRED_FILES = (
     "pack.yaml",
     "graph_schema.yaml",
+    "graph_mapping.yaml",
     "extraction_prompt.md",
     "extraction_schema.json",
     "sections.yaml",
@@ -34,16 +36,41 @@ class PackError(ValueError):
     """The domain pack is missing files or is inconsistent."""
 
 
+class LeakCheck(BaseModel):
+    """Rejects an extraction whose "known so far" text mentions the decision itself."""
+
+    list_field: str  # extraction field holding the stage list
+    text_field: str  # field inside each item that must not leak
+    patterns: list[str]  # regexes for phrases that reveal the decision
+
+    @model_validator(mode="after")
+    def _compile(self) -> "LeakCheck":
+        for pattern in self.patterns:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"invalid leak pattern {pattern!r}: {exc}") from exc
+        return self
+
+
 class PackInfo(BaseModel):
     name: str
     version: str
     language: str = "en"
     description: str = ""
+    # Extraction fields the parser already knows exactly: field -> documents column.
+    # They override what the model returns (the model must not invent identity fields).
+    known_fields: dict[str, Literal["doc_id", "title", "doc_date"]] = Field(default_factory=dict)
+    leak_check: LeakCheck | None = None
+
+
+_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class NodeType(BaseModel):
     key: str
     properties: list[str] = Field(default_factory=list)
+    indexes: list[str] = Field(default_factory=list)  # extra single-property indexes
 
 
 class RelType(BaseModel):
@@ -59,6 +86,15 @@ class GraphSchema(BaseModel):
 
     @model_validator(mode="after")
     def _endpoints_exist(self) -> "GraphSchema":
+        # Labels, types and properties are written into Cypher text, so they must be plain names.
+        names = [*self.nodes, *(r.type for r in self.relationships)]
+        for node in self.nodes.values():
+            names += [node.key, *node.properties, *node.indexes]
+        for rel in self.relationships:
+            names += rel.properties
+        for name in names:
+            if not _IDENTIFIER.match(name):
+                raise ValueError(f"'{name}' is not a valid graph identifier")
         for rel in self.relationships:
             for end in (rel.source, rel.target):
                 if end not in self.nodes:
@@ -99,12 +135,43 @@ class SectionConfig(BaseModel):
         return self
 
 
+class RootMapping(BaseModel):
+    """The node created for each document (for example the case itself)."""
+
+    label: str
+    key: str  # extraction field holding the node key
+    properties: dict[str, str] = Field(default_factory=dict)  # graph property -> field
+    types: dict[str, Literal["date"]] = Field(default_factory=dict)  # property -> value type
+    constants: dict[str, Any] = Field(default_factory=dict)  # always set on the node
+
+
+class LinkMapping(BaseModel):
+    """A list (or single value) in the extraction that becomes nodes plus relationships."""
+
+    field: str
+    label: str
+    key_field: str | None = None  # object items: field holding the key; None: the item is the key
+    key_normalise: bool = True  # case-fold and collapse spaces in the key
+    properties: dict[str, str] = Field(default_factory=dict)  # node property -> field ("$self")
+    on_create: dict[str, Any] = Field(default_factory=dict)  # constants set only when created
+    relationship: str
+    direction: Literal["out", "in"] = "out"  # out: root->node, in: node->root
+    rel_properties: dict[str, str] = Field(default_factory=dict)
+
+
+class GraphMapping(BaseModel):
+    root: RootMapping
+    links: list[LinkMapping]
+
+
 @dataclass(frozen=True)
 class DomainPack:
     path: Path
     info: PackInfo
     graph: GraphSchema
+    mapping: GraphMapping
     outcomes: list[str]
+    remedies: list[str]
     sections: SectionConfig
     query_templates: dict[str, str]
     extraction_schema: dict
@@ -129,9 +196,15 @@ def load_pack(packs_dir: Path, name: str) -> DomainPack:
     except ValueError as exc:
         raise PackError(f"pack '{name}': {exc}") from exc
 
-    outcomes = _yaml(path / "outcomes.yaml").get("outcomes", [])
-    if not outcomes or len(set(outcomes)) != len(outcomes):
-        raise PackError("outcomes.yaml must list unique, non-empty outcomes")
+    mapping = _load_mapping(path, graph)
+    outcome_file = _yaml(path / "outcomes.yaml")
+    outcomes = outcome_file.get("outcomes", [])
+    remedies = outcome_file.get("remedies", [])
+    for name, values in (("outcomes", outcomes), ("remedies", remedies)):
+        if len(set(values)) != len(values):
+            raise PackError(f"outcomes.yaml: {name} must be unique")
+    if not outcomes:
+        raise PackError("outcomes.yaml must list at least one outcome")
 
     schemas = {}
     for fname in ("extraction_schema.json", "advice_schema.json"):
@@ -149,7 +222,9 @@ def load_pack(packs_dir: Path, name: str) -> DomainPack:
         path=path,
         info=info,
         graph=graph,
+        mapping=mapping,
         outcomes=outcomes,
+        remedies=remedies,
         sections=sections,
         query_templates=templates,
         extraction_schema=schemas["extraction_schema.json"],
@@ -173,6 +248,47 @@ def _check_templates(templates: dict[str, str], graph: GraphSchema) -> None:
                 raise PackError(f"template '{name}' uses undeclared relationship '{rel}'")
         if "$as_of" not in cypher:
             raise PackError(f"template '{name}' must filter on $as_of")
+
+
+def _load_mapping(path: Path, graph: GraphSchema) -> GraphMapping:
+    """Read graph_mapping.yaml and check it only uses what graph_schema.yaml declares."""
+    file = path / "graph_mapping.yaml"
+    if not file.is_file():
+        raise PackError("pack is missing files: graph_mapping.yaml")
+    try:
+        mapping = GraphMapping(**_yaml(file))
+    except ValueError as exc:
+        raise PackError(f"graph_mapping.yaml: {exc}") from exc
+
+    root = mapping.root
+    _check_node(graph, root.label, [*root.properties, *root.constants])
+    rel_types = {r.type: r for r in graph.relationships}
+    for link in mapping.links:
+        _check_node(graph, link.label, [*link.properties, *link.on_create])
+        rel = rel_types.get(link.relationship)
+        if rel is None:
+            raise PackError(f"mapping uses undeclared relationship '{link.relationship}'")
+        source, target = (
+            (root.label, link.label) if link.direction == "out" else (link.label, root.label)
+        )
+        if (rel.source, rel.target) != (source, target):
+            raise PackError(
+                f"relationship {rel.type} is declared {rel.source}->{rel.target}, "
+                f"mapping uses {source}->{target}"
+            )
+        unknown = [p for p in link.rel_properties if p not in rel.properties]
+        if unknown:
+            raise PackError(f"relationship {rel.type} has undeclared properties {unknown}")
+    return mapping
+
+
+def _check_node(graph: GraphSchema, label: str, props: list[str]) -> None:
+    node = graph.nodes.get(label)
+    if node is None:
+        raise PackError(f"mapping uses undeclared label '{label}'")
+    unknown = [p for p in props if p not in node.properties and p != node.key]
+    if unknown:
+        raise PackError(f"label {label} has undeclared properties {unknown}")
 
 
 def _yaml(path: Path) -> dict:

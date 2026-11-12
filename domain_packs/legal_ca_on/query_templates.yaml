@@ -16,3 +16,8 @@ templates:
     MATCH (c:Case)-[r:CITES]->(a:Case)
     WHERE c.case_id IN $case_ids AND a.decision_date < $as_of
     RETURN a.case_id AS case_id, r.treatment AS treatment
+  remedies_by_issue: |
+    MATCH (c:Case)-[:RAISED]->(i:LegalIssue), (c)-[:ORDERED]->(m:Remedy)
+    WHERE i.issue_id IN $issue_ids AND c.decision_date < $as_of
+    RETURN m.label AS remedy, count(c) AS cases
+    ORDER BY cases DESC

@@ -1,0 +1,38 @@
+# How an extraction result (extraction_schema.json) becomes nodes and relationships.
+# Labels, properties and relationships must be declared in graph_schema.yaml.
+root:
+  label: Case
+  key: case_id
+  properties: {title: title, decision_date: decision_date, case_type: case_type, restrictions: restrictions}
+  types: {decision_date: date}
+  constants: {in_corpus: true}
+
+links:
+  - {field: court, label: Court, key_normalise: false, relationship: DECIDED_BY_COURT}
+  - {field: judges, label: Judge, properties: {name: '$self'}, relationship: SAT_ON}
+  - field: lawyers
+    label: Lawyer
+    key_field: name
+    properties: {name: name}
+    relationship: COUNSEL_IN
+    direction: in
+    rel_properties: {side: side}
+  - field: parties
+    label: Party
+    key_field: name
+    properties: {name: name, kind: kind}
+    relationship: INVOLVES
+    rel_properties: {role: role}
+  - {field: statute_provisions, label: StatuteProvision, key_normalise: false, properties: {section: '$self'}, relationship: APPLIED}
+  - {field: offences, label: Offence, properties: {name: '$self'}, relationship: CONCERNS}
+  - {field: issues, label: LegalIssue, properties: {name: '$self'}, relationship: RAISED}
+  - {field: principles, label: LegalPrinciple, properties: {name: '$self'}, relationship: RELIED_ON}
+  - {field: outcome, label: Outcome, key_normalise: false, relationship: RESULTED_IN}
+  - {field: remedies, label: Remedy, key_normalise: false, relationship: ORDERED}
+  - field: citations
+    label: Case
+    key_field: case_id
+    key_normalise: false
+    on_create: {in_corpus: false}
+    relationship: CITES
+    rel_properties: {treatment: treatment, para: para}

@@ -31,6 +31,17 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | `build_indexes` stage | done |
 | Validate the parser on a larger random sample of real files | waiting for the user's files |
 
+## Phase 2: Extraction and graph
+
+| Task | Status |
+|------|--------|
+| LLM provider interface, cache, cost estimate, dry run | done |
+| Extraction prompt (v1) and schema for the legal pack | done; run on 15 samples with gpt-5.4-mini |
+| Generic graph writer, constraints, mapping | done, tested with a hand-written fixture |
+| Run extraction on the 15 samples and iterate the prompt | done: 15/15 valid, about $0.22 |
+| Load the sample graph from real extractions | done: 118 Case nodes (15 in corpus), 106 citations |
+| Split outcome into disposition and remedy | done (ADR 0012), re-extracted on 15 samples |
+
 ## Later phases
 
 See `INSTRUCTIONS.md` section 15.

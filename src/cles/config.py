@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     openai_api_key: SecretStr | None = None
     allow_external_generator: bool = False
+    llm_concurrency: int = 4
+    llm_timeout_seconds: float = 600  # slow local models need more
+    # Prices change, so they are settings and not code. Without them, cost is not computed.
+    llm_price_input_per_mtok: float | None = None
+    llm_price_output_per_mtok: float | None = None
+    extraction_output_tokens_estimate: int = 2500  # used for dry-run cost estimates
 
     # Embeddings
     embedding_model: str = "BAAI/bge-base-en-v1.5"

@@ -24,6 +24,10 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [ar.1] | Dual retrieval stores | ADR 0001 |
 | [ar.2] | Flyway migrations | ADR 0004 |
 | [gr.1] | Domain packs | ADR 0002 |
+| [gr.2] | Extraction and graph mapping | ADR 0011, docs/03 |
+| [gr.3] | Local LLM (Ollama) trial | docs/03 |
+| [gr.4] | OpenAI extraction run (gpt-5.4-mini) | docs/04 |
+| [gr.5] | Disposition and remedy split | ADR 0012, docs/03 |
 | [ml.1] | Fine-tuning stack | ADR 0003 |
 | [ml.2] | Stage cuts and leakage | ADR 0008 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |

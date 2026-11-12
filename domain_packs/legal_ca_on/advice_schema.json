@@ -2,40 +2,105 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Advice",
   "type": "object",
-  "required": ["case_position", "routes", "risks", "recommended_next_steps",
-               "missing_information", "evidence_strength"],
+  "required": [
+    "case_position",
+    "routes",
+    "risks",
+    "recommended_next_steps",
+    "missing_information",
+    "evidence_strength"
+  ],
   "properties": {
-    "case_position": {"type": "string"},
+    "case_position": {
+      "type": "string"
+    },
     "routes": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "description", "expected_outcome", "likelihood", "reasoning",
-                     "authorities"],
+        "required": [
+          "name",
+          "description",
+          "expected_outcome",
+          "likelihood",
+          "reasoning",
+          "authorities"
+        ],
         "properties": {
-          "name": {"type": "string"},
-          "description": {"type": "string"},
-          "expected_outcome": {"type": "string"},
-          "likelihood": {"enum": ["low", "medium", "high"]},
-          "reasoning": {"type": "string"},
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "expected_outcome": {
+            "type": "string"
+          },
+          "likelihood": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "reasoning": {
+            "type": "string"
+          },
           "authorities": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["case_id", "para", "quote"],
+              "required": [
+                "case_id",
+                "para",
+                "quote"
+              ],
               "properties": {
-                "case_id": {"type": "string"},
-                "para": {"type": "integer"},
-                "quote": {"type": "string"}
+                "case_id": {
+                  "type": "string"
+                },
+                "para": {
+                  "type": "integer"
+                },
+                "quote": {
+                  "type": "string"
+                }
               }
+            }
+          },
+          "expected_remedies": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
       }
     },
-    "risks": {"type": "array", "items": {"type": "string"}},
-    "recommended_next_steps": {"type": "array", "items": {"type": "string"}},
-    "missing_information": {"type": "array", "items": {"type": "string"}},
-    "evidence_strength": {"enum": ["weak", "moderate", "strong"]}
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommended_next_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_information": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_strength": {
+      "enum": [
+        "weak",
+        "moderate",
+        "strong"
+      ]
+    }
   }
 }

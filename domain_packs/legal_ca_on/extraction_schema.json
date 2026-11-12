@@ -2,47 +2,215 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Extraction result",
   "type": "object",
-  "required": ["case_id", "title", "decision_date", "case_type", "outcome", "stages"],
+  "required": [
+    "case_id",
+    "title",
+    "decision_date",
+    "case_type",
+    "outcome",
+    "stages"
+  ],
   "properties": {
-    "case_id": {"type": "string"},
-    "title": {"type": "string"},
-    "decision_date": {"type": "string", "format": "date"},
-    "case_type": {"enum": ["criminal", "civil", "other"]},
-    "court": {"type": "string"},
-    "judges": {"type": "array", "items": {"type": "string"}},
-    "lawyers": {"type": "array", "items": {"type": "object"}},
-    "parties": {"type": "array", "items": {"type": "object"}},
-    "statute_provisions": {"type": "array", "items": {"type": "string"}},
-    "offences": {"type": "array", "items": {"type": "string"}},
-    "issues": {"type": "array", "items": {"type": "string"}},
-    "principles": {"type": "array", "items": {"type": "string"}},
+    "case_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "decision_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "case_type": {
+      "enum": [
+        "criminal",
+        "civil",
+        "other"
+      ]
+    },
+    "court": {
+      "type": "string"
+    },
+    "judges": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lawyers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "appellant",
+              "respondent",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    "parties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "person",
+              "organization",
+              "crown",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    "statute_provisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "offences": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "principles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "citations": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["case_id", "treatment"],
+        "required": [
+          "case_id",
+          "treatment"
+        ],
         "properties": {
-          "case_id": {"type": "string"},
-          "treatment": {
-            "enum": ["followed", "distinguished", "applied", "considered", "overruled", "cited"]
+          "case_id": {
+            "type": "string"
           },
-          "para": {"type": "integer"}
+          "treatment": {
+            "enum": [
+              "followed",
+              "distinguished",
+              "applied",
+              "considered",
+              "overruled",
+              "cited"
+            ]
+          },
+          "para": {
+            "type": "integer"
+          }
         }
       }
     },
-    "outcome": {"type": "string"},
-    "restrictions": {"type": "string"},
+    "outcome": {
+      "enum": [
+        "appeal_allowed",
+        "appeal_dismissed",
+        "appeal_allowed_in_part",
+        "other"
+      ]
+    },
+    "restrictions": {
+      "type": "string"
+    },
     "stages": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["stage", "known_so_far", "next_steps"],
+        "required": [
+          "stage",
+          "known_so_far",
+          "next_steps"
+        ],
         "properties": {
-          "stage": {"type": "string"},
-          "known_so_far": {"type": "string"},
-          "next_steps": {"type": "string"}
+          "stage": {
+            "enum": [
+              "facts",
+              "procedural_history",
+              "lower_court_decision",
+              "grounds_of_appeal"
+            ]
+          },
+          "known_so_far": {
+            "type": "string",
+            "minLength": 80
+          },
+          "next_steps": {
+            "type": "string"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "remedies": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "sentence_increased",
+          "sentence_reduced",
+          "new_trial_ordered",
+          "acquittal_entered",
+          "acquittal_set_aside",
+          "remitted",
+          "order_varied",
+          "order_set_aside",
+          "leave_to_appeal_granted"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "appeal_dismissed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "remedies": {
+            "maxItems": 0
+          }
         }
       }
     }
-  }
+  ]
 }

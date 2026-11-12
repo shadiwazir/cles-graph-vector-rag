@@ -75,3 +75,33 @@
 - Done: embed of 227 child chunks OK (cpu; torch did not use the GTX 1050), HNSW index built. `cles run embed build_indexes` failed first because chained stages share run_id and ingestion_runs PK was run_id only -> added Flyway V2 (PK (run_id, stage)) and updated db.recorded_run. Re-run OK. Sanity similarity queries run. 35 tests pass, ruff clean.
 - Files affected: infra/postgres/migrations/V2__ingestion_runs_key.sql, src/cles/db.py, src/cles/observability/logging.py (quiet http loggers), docs.
 - Next: user review and commit; Phase 1 sign-off; offer Phase 2.
+
+## 2026-11-11 Phase 2 built (extraction cache + graph)
+- Done: added openai, neo4j deps. llm/ (protocol, OpenAI-compatible client, cost), extraction/ (extractor, extract stage with cache/threads/dry-run), graph/ (client, generic mapping-driven writer, graph_load stage), pack: graph_mapping.yaml + GraphMapping validation, Case.in_corpus + decision_date index, tighter extraction_schema, settings for concurrency and prices. ADR 0011, docs 03-05 updated, refs gr.2. 48 tests pass (incl. Neo4j), ruff clean. Dry-run extract: 15 pending, ~87k input tokens. Verified graph_load end to end with a hand-written fixture (then cleaned DB).
+- Files affected: src/cles/{llm,extraction,graph}/*, src/cles/domain/pack.py, config.py, cli.py, domain_packs/legal_ca_on/*, tests/*, docs/*, .env.example, pyproject.toml, uv.lock.
+- Pending: user decisions - LLM model, API key, approval to run extraction on 15 samples (cost); then iterate prompt, load graph from real extractions.
+
+## 2026-11-12 Local LLM trial (Ollama)
+- Done: ran extraction on the 15 samples with qwen2.5:1.5b (5/15 valid) and gemma3:1b (3/15) via 16k-context derived models; analysed failures; added parser-known fields override, `tidy`, outcome enum in schema; removed junk local extractions from DB. See refs gr.3.
+- Files affected: src/cles/extraction/extractor.py, extract.py, domain/pack.py, domain_packs/legal_ca_on/{pack.yaml,extraction_schema.json}, tests/test_extraction.py, .agent/memory/refs/*.
+- Next: user decision on a stronger model (API or bigger local) for the real sample run.
+
+## 2026-11-13 qwen2.5:7b run and sample graph
+- Done: 7B local run on 15 samples (12 ok / 1 invalid / 2 failed, 2h49), scored, loaded 12 extractions into Neo4j; added error storage for failed rows and LLM_TIMEOUT_SECONDS. See refs gr.3.
+- Files affected: src/cles/extraction/extract.py, llm/openai_client.py, config.py, .env.example, .agent/memory/refs/gr.3.md.
+- Pending: user decision on next step (review outputs / run remaining 3 with larger context + timeout / try OpenAI model).
+
+## 2026-11-14 Review of extraction outputs, prompt v1, leak check
+- Done: reviewed all 12 7B outputs against the PDFs; found leaks and thin/filler stage cuts; added pack leak_check + find_leaks in extractor (retry with feedback), prompt v1, schema tweaks, tests, fixture update; trial of v1 on 4 short docs (all ok, no leaks). Notes in refs gr.3.
+- Files affected: domain_packs/legal_ca_on/{pack.yaml,extraction_prompt.md,extraction_schema.json}, src/cles/domain/pack.py, src/cles/extraction/extractor.py, tests/test_extraction.py, tests/fixtures/*, docs/03-architecture.md, refs.
+- Next: user decision - finish the other 11 docs with the 7B (long, ~2-3 h) or try an OpenAI model; then hand-review and Phase 2 sign-off.
+
+## 2026-11-14 OpenAI extraction run on 15 samples
+- Done: gpt-5.4-mini run (14 ok + 1 invalid, retry with MAX_ATTEMPTS=3 -> 15/15), cost about $0.22, 48 s. Spot-checked against PDFs, graph rebuilt from the 15 extractions. docs/04 and refs gr.4 updated.
+- Files affected: src/cles/extraction/extractor.py (MAX_ATTEMPTS), docs/04-implementation-plan.md, .agent/memory/refs/*.
+- Pending: user decision on outcome/remedy split; Phase 2 sign-off; commit.
+
+## 2026-11-14 Disposition/remedy split
+- Done: split outcome into disposition + remedies (pack 0.2.0: outcomes.yaml, graph schema/mapping/templates, extraction schema + prompt rules + if/then schema rule, advice schema), tests, ADR 0012, docs 03/04, refs gr.5. Re-extracted 15 samples twice with gpt-5.4-mini (15/15 ok both times; $0.163 then $0.209), reviewed remedies against PDFs, rebuilt the graph.
+- Files affected: domain_packs/legal_ca_on/*, src/cles/domain/{pack,check}.py, tests/*, docs/*, .agent/memory/refs/*.
+- Pending: user review; commit (message proposed in chat).

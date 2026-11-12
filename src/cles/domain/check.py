@@ -14,6 +14,7 @@ def run(ctx: StageContext) -> dict:
         "node_labels": len(pack.graph.nodes),
         "relationship_types": len(pack.graph.relationships),
         "outcomes": len(pack.outcomes),
+        "remedies": len(pack.remedies),
         "query_templates": len(pack.query_templates),
     }
 

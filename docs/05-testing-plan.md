@@ -26,6 +26,12 @@ Run: `uv run pytest`, `uv run ruff check .`.
 - After `embed` and `build_indexes`, every child chunk has a 768-dimension embedding and the HNSW index exists.
 - `tests/test_store_integration.py` needs the Compose Postgres and is skipped when it is unreachable.
 
+## Phase 2 acceptance
+
+- Extraction logic (valid, retry, invalid, provider error, cost, cache key) passes with a fake client.
+- Graph writer on Neo4j: idempotent re-write, replaced relationships, cited stubs keep `in_corpus` correct (skipped when Neo4j is unreachable).
+- With a real model: every sample document reaches `ok`; outputs are reviewed by hand against the PDFs (stage cuts must not contain reasoning or the disposition).
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

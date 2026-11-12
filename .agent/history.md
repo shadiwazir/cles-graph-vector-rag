@@ -135,3 +135,8 @@
 - Done: user asked to update INSTRUCTIONS.md section 8 to match the stage-aware advice schema (stage, next_event, optional expected_outcome early, expected_remedies, likelihood caps). Only section 8 changed.
 - Files affected: INSTRUCTIONS.md, .agent/history.md.
 - Pending: user commits; Phase 4 sign-off; offer Phase 5.
+
+## 2026-11-16 Docling side question
+- Done: answered the user's side question about Docling. Tested docling 2.150.0 in an isolated scratch venv on 3 sample PDFs; results in refs da.2. No project code or dependencies changed.
+- Files affected: .agent/memory/refs/da.2.md, refs/INDEX.md, .agent/history.md.
+- Pending: user commit of section 8 sync (staged), Phase 4 sign-off, then Phase 5.

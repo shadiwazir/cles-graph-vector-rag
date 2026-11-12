@@ -23,6 +23,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 |-----|-------|---------|
 | [ar.1] | Dual retrieval stores | ADR 0001 |
 | [ar.2] | Flyway migrations | ADR 0004 |
+| [da.2] | Docling trial vs PyMuPDF | (side question, no doc) |
 | [gr.1] | Domain packs | ADR 0002 |
 | [gr.2] | Extraction and graph mapping | ADR 0011, docs/03 |
 | [gr.3] | Local LLM (Ollama) trial | docs/03 |

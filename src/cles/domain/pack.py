@@ -25,6 +25,8 @@ REQUIRED_FILES = (
     "advice_schema.json",
     "advice_prompt.md",
     "query_templates.yaml",
+    "training.yaml",
+    "target_prompt.md",
 )
 
 # Cypher fragments such as (c:Case) and [r:CITES]
@@ -139,6 +141,18 @@ class SectionConfig(BaseModel):
         return self
 
 
+class TrainingConfig(BaseModel):
+    """Per-domain settings for building training examples."""
+
+    questions: dict[str, list[str]]  # stage -> questions a user might ask at that stage
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> "TrainingConfig":
+        if not self.questions or any(not qs for qs in self.questions.values()):
+            raise ValueError("every stage needs at least one question")
+        return self
+
+
 class RootMapping(BaseModel):
     """The node created for each document (for example the case itself)."""
 
@@ -174,6 +188,8 @@ class DomainPack:
     info: PackInfo
     graph: GraphSchema
     mapping: GraphMapping
+    training: TrainingConfig
+    target_prompt: str
     outcomes: list[str]
     remedies: list[str]
     sections: SectionConfig
@@ -201,6 +217,10 @@ def load_pack(packs_dir: Path, name: str) -> DomainPack:
         raise PackError(f"pack '{name}': {exc}") from exc
 
     mapping = _load_mapping(path, graph)
+    try:
+        training = TrainingConfig(**_yaml(path / "training.yaml"))
+    except ValueError as exc:
+        raise PackError(f"training.yaml: {exc}") from exc
     outcome_file = _yaml(path / "outcomes.yaml")
     outcomes = outcome_file.get("outcomes", [])
     remedies = outcome_file.get("remedies", [])
@@ -227,6 +247,8 @@ def load_pack(packs_dir: Path, name: str) -> DomainPack:
         info=info,
         graph=graph,
         mapping=mapping,
+        training=training,
+        target_prompt=(path / "target_prompt.md").read_text(encoding="utf-8"),
         outcomes=outcomes,
         remedies=remedies,
         sections=sections,

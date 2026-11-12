@@ -110,3 +110,13 @@
 - Done: user confirmed 727 and 717 labels (domain rule saved in memory/domain-rules.md) and committed Phase 2; started Phase 3. Built retrieval (search/fusion/graph/rerank/hybrid), citation verifier, advisor + prompt + guard + audit, FastAPI app, record_manifest stage, evaluation harness + dev set, OpenTelemetry (spans, metrics), observability Compose profile (collector, Phoenix, Prometheus, Grafana + provisioned dashboard), shared llm/structured helper. ADR 0013, docs 03-05, README, refs rt.3. 90 tests pass, ruff clean. Verified: traces in Phoenix (project cles, case text redacted), metrics in Prometheus, dashboard in Grafana, API starts and /health OK, guard refuses external generator by default.
 - Files affected: src/cles/{retrieval,inference,evaluation,observability,llm}/*, src/cles/{manifest,stage,config,cli}.py, domain_packs/legal_ca_on/{pack.yaml,query_templates.yaml}, infra/docker-compose.yml, infra/observability/*, eval/retrieval_dev.yaml, tests/*, docs/*, README.md, .env.example.
 - Pending: user approval for a real-model API run on a public question (cost small); commit; Phase 3 sign-off; offer Phase 4.
+
+## 2026-11-15 First real-model API run
+- Done: user approved one public sample question and committed Phase 3. Ran POST /advise on a synthetic scenario with gpt-5.4-mini: 14 s, 9 citations all verified, moderate evidence. Notes in refs rt.3. Services stopped.
+- Files affected: docs/04-implementation-plan.md, .agent/memory/refs/rt.3.md, .agent/history.md.
+- Pending: user sign-off on Phase 3; then offer Phase 4.
+
+## 2026-11-15 Fixes + Phase 4 built (training data)
+- Done: (1) likelihood cap by evidence + advice schema enums/dismissed rule + prompt v1 (user-requested fixes); (2) Phase 4: pack training.yaml and target_prompt.md, Flyway V3 training_targets, training/{dataset,target,leakage,build_dataset,check_dataset}, ADR 0014, docs 03-05, refs ml.3. Tests with fake LLM and fake retriever for split, targets, L1-L5. Dry run on 15 samples: 59 examples, est $0.89.
+- Files affected: domain_packs/legal_ca_on/*, infra/postgres/migrations/V3__training_targets.sql, src/cles/training/*, src/cles/inference/{calibration,advisor}.py, src/cles/domain/pack.py, config.py, cli.py, tests/*, docs/*.
+- Pending: user approval for the paid build on 15 samples; then check_dataset, review examples, commit, Phase 4 sign-off, offer Phase 5.

@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     evidence_strong_distance: float = 0.35  # cosine distance
     evidence_weak_distance: float = 0.45
 
+    # Training data
+    training_eval_fraction: float = 0.1  # newest share of documents held out for evaluation
+    training_out_dir: Path = Path("artifacts/datasets")
+    dataset_dir: Path | None = None  # dataset to check; default: the newest in training_out_dir
+
     # Project
     domain_pack: str = "legal_ca_on"
     data_dir: Path = Path("data")

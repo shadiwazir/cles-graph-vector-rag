@@ -163,3 +163,15 @@ def test_as_of_is_passed_to_retrieval(conn, embedder, pack, settings):
     assert all("2026 ONCA 719" not in s["label"] for s in response.sources)
     # an authority dated on/after as_of is rejected even if the model cites it
     assert any("after_as_of" in w for w in response.warnings)
+
+
+def test_likelihood_is_capped_by_evidence(conn, embedder, pack, settings):
+    advice = make_advice(conn)
+    advice["routes"][0]["likelihood"] = "high"
+    advisor = build(conn, embedder, pack, settings, FakeGenerator(advice))
+    response = advisor.advise(
+        AdviceRequest("Tell me about sourdough bread starters and fermentation.", "How long?")
+    )
+    assert response.evidence_strength == "weak"
+    assert response.advice["routes"][0]["likelihood"] == "low"
+    assert any("likelihood" in w and "lowered" in w for w in response.warnings)

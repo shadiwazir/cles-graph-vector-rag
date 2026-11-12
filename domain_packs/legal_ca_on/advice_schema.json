@@ -34,7 +34,12 @@
             "type": "string"
           },
           "expected_outcome": {
-            "type": "string"
+            "enum": [
+              "appeal_allowed",
+              "appeal_dismissed",
+              "appeal_allowed_in_part",
+              "other"
+            ]
           },
           "likelihood": {
             "enum": [
@@ -71,10 +76,41 @@
           "expected_remedies": {
             "type": "array",
             "items": {
-              "type": "string"
+              "enum": [
+                "sentence_increased",
+                "sentence_reduced",
+                "new_trial_ordered",
+                "acquittal_entered",
+                "acquittal_set_aside",
+                "remitted",
+                "order_varied",
+                "order_set_aside",
+                "leave_to_appeal_granted"
+              ]
             }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "expected_outcome": {
+                  "const": "appeal_dismissed"
+                }
+              },
+              "required": [
+                "expected_outcome"
+              ]
+            },
+            "then": {
+              "properties": {
+                "expected_remedies": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "risks": {

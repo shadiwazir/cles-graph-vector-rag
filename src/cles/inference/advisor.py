@@ -12,6 +12,7 @@ import psycopg
 
 from cles.config import Settings
 from cles.domain.pack import DomainPack
+from cles.inference.calibration import cap_likelihood
 from cles.inference.guard import check_generator_allowed
 from cles.inference.prompt import build_messages
 from cles.inference.verifier import CitationVerifier
@@ -90,7 +91,7 @@ class Advisor:
     def _advise(
         self, req: AdviceRequest, flt: SearchFilter, request_id: str, started: float
     ) -> AdviceResponse:
-        context = self._retriever.retrieve(_search_text(req), flt)
+        context = self._retriever.retrieve(search_text(req), flt)
 
         messages = build_messages(self._pack, req.case_text, req.question, context)
         with span("generate", kind="LLM", **{"llm.model_name": self._client.model}) as gen:
@@ -112,6 +113,7 @@ class Advisor:
             warnings += report.warnings()
             strength = _weaker(outcome.result.get("evidence_strength", strength), strength)
             advice["evidence_strength"] = strength
+            warnings += cap_likelihood(advice, strength)
         else:
             warnings.append(f"generation failed: {outcome.error}")
         if strength == "weak":
@@ -178,7 +180,7 @@ class Advisor:
         self._conn.commit()
 
 
-def _search_text(req: AdviceRequest) -> str:
+def search_text(req: AdviceRequest) -> str:
     """Query for retrieval: the question plus the start of the case (embedder limit: 512 tokens)."""
     return f"{req.question}\n{req.case_text}"[:2000]
 

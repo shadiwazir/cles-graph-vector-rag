@@ -142,3 +142,9 @@ def test_dismissed_appeal_with_remedies_is_rejected_by_schema():
     bad = json.loads(VALID) | {"outcome": "appeal_dismissed", "remedies": ["order_varied"]}
     out = extract_document(FakeClient(*[json.dumps(bad)] * 3), PACK, "d", "h", "t")
     assert out.status == "invalid" and "remedies" in out.error
+
+
+def test_advice_schema_enums_match_outcomes_file():
+    route = PACK.advice_schema["properties"]["routes"]["items"]["properties"]
+    assert route["expected_outcome"]["enum"] == PACK.outcomes
+    assert route["expected_remedies"]["items"]["enum"] == PACK.remedies

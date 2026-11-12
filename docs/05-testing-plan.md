@@ -41,6 +41,13 @@ Run: `uv run pytest`, `uv run ruff check .`.
 - Telemetry: spans and metrics reach Phoenix and Prometheus; the span carries no case text by default.
 - Evaluation dev set: recall@1 and MRR reported (all 1.0 on the 15-decision sample, a plumbing check only).
 
+## Phase 4 acceptance
+
+- Split: training documents strictly older than evaluation documents; same-date documents stay together; a corpus with no training documents is rejected.
+- Examples: input equals the runtime prompt and never contains the hindsight block; retrieval excludes the case and uses `as_of` correctly (training: own date; evaluation: split date).
+- Targets: first route equals the real outcome and remedies; authorities and quotes come from the example's retrieved passages; no self-mention; likelihood capped by evidence; retries with feedback; failures are cached and reported.
+- Leakage: each of L1 to L5 has a test that a violating example is caught; `check_dataset` passes on a built dataset.
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

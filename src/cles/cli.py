@@ -19,6 +19,8 @@ STAGES: dict[str, str] = {
     "graph_load": "cles.graph.load",
     "record_manifest": "cles.manifest",
     "evaluate": "cles.evaluation.run",
+    "build_dataset": "cles.training.build_dataset",
+    "check_dataset": "cles.training.check_dataset",
 }
 
 

@@ -48,6 +48,8 @@ flowchart LR
 | `evaluation/` | `retrieval` metrics, `run` (`evaluate` stage, optional generation) | done |
 | `observability/telemetry.py`, `metrics.py` | OpenTelemetry setup, spans, metrics | done |
 | `manifest.py` | `record_manifest` stage (`build_manifest` row) | done |
+| `training/` | `dataset` (split, questions, hindsight), `target` (generate and check targets), `leakage` (L1-L5), `build_dataset` and `check_dataset` stages | done |
+| `inference/calibration.py` | Caps route likelihood by evidence strength (runtime and training) | done |
 | `training/` | Phases 4 and 5 | planned |
 
 ## Infrastructure (`infra/`)
@@ -158,3 +160,24 @@ Start: set `GRAFANA_PASSWORD` in `.env`, then `docker compose --env-file .env -f
 ## Evaluation (Phase 3)
 
 `cles run evaluate` runs `eval/retrieval_dev.yaml` (15 hand-written questions, one expected decision each) and writes `artifacts/eval/<run_id>.json` with recall@1/3/5 and MRR. `python -m cles.evaluation.run --with-generation` also calls the generator and reports citation pass rate, weak-evidence share and latency (paid, public or synthetic questions only). With 15 distinct decisions the retrieval numbers are a plumbing check, not a quality measure.
+
+## Training data (Phase 4)
+
+```mermaid
+flowchart TD
+    E[(extractions: stages, outcome, remedies)] --> S[time-based split by decision date]
+    S --> R[retrieve context: older documents only, case excluded]
+    R --> P[runtime prompt: case at stage + question + passages + graph facts]
+    E --> H[hindsight block: outcome, remedies, next event]
+    P --> W[target writer LLM]
+    H --> W
+    W --> C{checks: first route = real outcome, authorities from passages, no self-mention}
+    C -->|retry with reasons| W
+    C -->|ok| K[(training_targets cache)]
+    K --> A[assemble example: runtime prompt + target]
+    A --> L{leakage L1-L5}
+    L -->|violation| D[dropped, counted]
+    L -->|clean| F[train.jsonl / eval.jsonl / manifest.json]
+```
+
+Commands: `cles run build_dataset` (`--dry-run` retrieves and estimates cost; `--limit N`), then `cles run check_dataset`. Output in `artifacts/datasets/<run id>/`. Each line has `messages` (system, user, assistant) plus metadata (`doc_id`, `stage`, `as_of`, `split`, `context_docs`, `outcome`, `remedies`, `evidence_strength`). Settings: `TRAINING_EVAL_FRACTION` (default 0.1), `TRAINING_OUT_DIR`. The pack supplies `training.yaml` (questions per stage) and `target_prompt.md`. Design: ADR 0014.

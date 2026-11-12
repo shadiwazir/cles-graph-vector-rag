@@ -1,0 +1,14 @@
+# Questions a lawyer might ask at each stage of a case. One is picked per example (deterministic).
+questions:
+  facts:
+    - "We are at the very beginning. What are our options, what outcomes are realistic, and what should we do first?"
+    - "Based on these facts alone, how should we assess the case and what are the next steps?"
+  procedural_history:
+    - "Given the proceedings so far, what routes are open to us and how likely is each?"
+    - "Where does the case stand procedurally, and what should we do next?"
+  lower_court_decision:
+    - "The lower court has decided. Should we appeal, what are our prospects, and what are the risks?"
+    - "What are the realistic outcomes of challenging this decision, and what should we prepare?"
+  grounds_of_appeal:
+    - "The grounds of appeal are set. What outcome should we expect and how should we argue it?"
+    - "Given the arguments on both sides, what are the likely outcomes and the key risks?"

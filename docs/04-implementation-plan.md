@@ -52,10 +52,21 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | LLM query analysis | deferred (ADR 0013) |
 | Citation verifier | done |
 | FastAPI service with generator guard and `request_audit` | done, tested with a fake generator |
-| Run the API with a real model on a public sample question | waiting for the user's approval (paid call) |
+| Run the API with a real model on a public sample question | done: gpt-5.4-mini, 14 s, 9 citations all verified |
 | Evaluation harness (retrieval metrics, optional generation metrics) | done; generation metrics not yet run |
 | OpenTelemetry, Phoenix, Prometheus, Grafana (profile `observability`) | done, verified |
 | `record_manifest` stage | done |
+
+## Phase 4: Training data
+
+| Task | Status |
+|------|--------|
+| Time-based split (newest documents = evaluation) | done |
+| Stage-cut examples with runtime-identical prompts | done |
+| Target writer with checks, retries, likelihood cap, cache (`training_targets`, Flyway V3) | done, tested with a fake LLM |
+| Leakage rules L1-L5 as code, plus independent `check_dataset` stage | done |
+| Run on the 15 samples (59 examples) | waiting for the user's approval (paid; about $0.9 estimated) |
+| Add the dataset to DVC | after the first real build |
 
 ## Later phases
 

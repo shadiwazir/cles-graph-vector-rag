@@ -8,11 +8,15 @@ import argparse
 import json
 import logging
 import sys
+import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from cles.config import get_settings
+from cles.observability import metrics as m
 from cles.observability.logging import setup_logging
+from cles.observability.telemetry import setup_telemetry, shutdown_telemetry, span
 
 log = logging.getLogger(__name__)
 
@@ -41,13 +45,26 @@ def stage_main(
     """Run `fn`, print the JSON summary, exit 0 on success and 1 on failure."""
     setup_logging()
     ctx = parse_args(argv)
+    setup_telemetry(f"cles-stage-{name}", get_settings())
+    started = time.monotonic()
+    status = "failed"
     try:
-        result = fn(ctx)
+        with span(f"stage.{name}", run_id=ctx.run_id, dry_run=ctx.dry_run):
+            result = fn(ctx)
+        status = "ok"
     except Exception as exc:
         log.exception("stage %s failed", name)
         _print_summary(name, ctx, "failed", {"error": str(exc)})
+        _finish(name, status, started)
         sys.exit(1)
     _print_summary(name, ctx, "ok", result)
+    _finish(name, status, started)
+
+
+def _finish(name: str, status: str, started: float) -> None:
+    m.stage_runs.add(1, {"stage": name, "status": status})
+    m.stage_duration.record(time.monotonic() - started, {"stage": name})
+    shutdown_telemetry()
 
 
 def _print_summary(name: str, ctx: StageContext, status: str, details: dict) -> None:

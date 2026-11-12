@@ -14,6 +14,10 @@ dependencies = [
     "pgvector>=0.5.1",
     "openai>=3.49.0",
     "neo4j>=6.4.1",
+    "fastapi>=0.162.5",
+    "uvicorn>=0.54.0",
+    "opentelemetry-sdk>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +27,12 @@ embed = ["sentence-transformers>=3"]
 cles = "cles.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.5", "dvc>=3.50"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "dvc>=3.50",
+    "httpx>=0.28.1",
+]
 
 [build-system]
 requires = ["hatchling"]

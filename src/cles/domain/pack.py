@@ -62,6 +62,10 @@ class PackInfo(BaseModel):
     # They override what the model returns (the model must not invent identity fields).
     known_fields: dict[str, Literal["doc_id", "title", "doc_date"]] = Field(default_factory=dict)
     leak_check: LeakCheck | None = None
+    disclaimer: str = (
+        "Decision support for a qualified professional; not professional advice. Review before use."
+    )
+    scope: str = ""  # what the corpus covers, shown with every answer
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

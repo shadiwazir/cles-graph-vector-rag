@@ -1,0 +1,18 @@
+# 0013. Retrieval, verification and advisor design [rt.3]
+
+**Status:** accepted (query analysis deferred)
+
+**Context.** Phase 3 delivers the runtime: retrieval from both stores, generation, and the checks that make an answer usable by a lawyer. The corpus in development is 15 decisions, so every choice has to be justified by design, not by sample metrics.
+
+**Decisions.**
+1. **Search:** child chunks searched by pgvector (cosine) and by full-text with OR semantics (`to_tsquery` over the question's words; `plainto_tsquery` would need every word to match). Results merged by reciprocal rank fusion (k = 60), which needs no score calibration. An optional cross-encoder reranker (`RERANKER_MODEL`) runs on the fused list; it is off by default.
+2. **Time guard:** every search takes `SearchFilter(as_of, exclude_doc_ids)`; Postgres filters `doc_date < as_of`, and every Cypher template must contain `$as_of` (checked when the pack loads). Leakage rules L2 and L3 are therefore enforced at the query level.
+3. **Graph context seeded by passage hits, not by an LLM.** The cases behind the top passages seed three templates (`case_profile`, `citation_treatment`, `related_cases_by_provision`). This needs no extra paid call and sends no case text anywhere. The planned LLM query-analysis step (extract provisions, issues, stage from the question) is deferred until retrieval metrics on real data show seeds from passages are not enough.
+4. **Evidence strength** comes from vector distances of the retrieved passages (strong: at least 3 within 0.35; moderate: at least 2 within 0.45; else weak). The advice carries the weaker of the model's own rating and this one, so the model cannot claim more confidence than the evidence supports. Thresholds are settings and must be recalibrated on real data.
+5. **Citation verifier is plain code.** It checks case exists and is older than `as_of`, paragraph exists, and the quote is inside that paragraph (case-folded, quotes and dashes unified, `...` splits a quote into ordered segments). Failed authorities are removed from the answer and counted; overruled ones (graph `overruled_by` template) are flagged. Verified authorities carry `verified: true`.
+6. **Confidentiality guard:** `check_generator_allowed` refuses to start the API or the advisor when `LLM_BASE_URL` is not local unless `ALLOW_EXTERNAL_GENERATOR=true`. Case text is never stored in `request_audit` unless `AUDIT_STORE_QUESTION=true`.
+7. **Audit and lineage:** each answer writes one `request_audit` row linked to the newest `build_manifest` (written by `cles run record_manifest`: git commit, DVC data hash, pack version, embedding model, Flyway version).
+8. **Telemetry:** spans for every step (kinds RETRIEVER, LLM, CHAIN as Phoenix expects) and metrics (latency, answers by evidence, citations verified/failed, tokens, stage runs) go through OpenTelemetry to a Collector, then Phoenix and Prometheus, shown in a provisioned Grafana dashboard. Case text in spans is redacted by default.
+9. **Service:** FastAPI, one Postgres connection per request (psycopg connections are not thread-safe; a pool is the next step under load), one shared embedder loaded at start-up.
+
+**Consequences.** The API works end to end with any OpenAI-compatible generator. Known limits: provision names are not normalised ("Criminal Code s. 151" vs "Criminal Code, R.S.C. 1985, c. C-46 s. 151" are separate nodes), so provision-based graph hops under-connect until entity resolution exists; graph retrieval only expands from passage hits; reranker untested with a real model; the evidence thresholds were chosen from a 15-decision sample.

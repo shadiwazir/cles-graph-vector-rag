@@ -17,6 +17,8 @@ STAGES: dict[str, str] = {
     "build_indexes": "cles.ingestion.build_indexes",
     "extract": "cles.extraction.extract",
     "graph_load": "cles.graph.load",
+    "record_manifest": "cles.manifest",
+    "evaluate": "cles.evaluation.run",
 }
 
 

@@ -1,0 +1,9 @@
+# rt.3 Phase 3 build notes (ADR 0013)
+- Done in this phase: retrieval (search, RRF, graph templates, evidence strength, optional reranker), verifier, advisor, API, guard, audit, manifest stage, evaluation harness, OTel + Phoenix + Prometheus + Grafana. Refactor: llm/structured.ask_for_json now shared by extractor and advisor (extractor tests still pass).
+- Decision: graph context seeded from passage hits (no LLM query analysis, so no extra paid call and no case text leaves). INSTRUCTIONS lists a query analyser: deferred, flag to user.
+- Templates: good_law_authorities replaced by citation_treatment (filters on the citing case only; a cited stub has no date, which made the old template drop it); added case_profile, related_cases_by_provision, overruled_by.
+- Eval: dev set eval/retrieval_dev.yaml (15 questions, hand-written by me). All metrics 1.0 on 15 distinct decisions: plumbing only. Evidence thresholds 0.35/0.45 chosen from sanity runs (relevant 0.23-0.34; unrelated sourdough query weak).
+- Telemetry gotchas: the local .env had OTEL endpoint 4317 (gRPC) from the old template; the Python HTTP exporter needs 4318 (BadStatusLine with HTTP/2 bytes). Fixed in .env.example and local .env. Phoenix pinned version-20.27.0 (21.0.0 exists); collector 0.165.0; Prometheus v3.16.0; Grafana 13.2.6. GRAFANA_PASSWORD required (local .env has a dev value, git-ignored).
+- torch CUDA wheel complains the NVIDIA driver is too old (12.8): embeddings/reranker run on CPU on this laptop; on the GPU machine use a matching torch build.
+- Known gaps: provision names not normalised (graph hops under-connect), no per-request connection pool, reranker untested with a real model, no generation eval run yet, no alert rules yet (Phase 6), no real-model API run yet (needs user approval: paid call, public/synthetic question only).
+- Neo4j integration tests wipe the graph; reload with `cles run graph_load` after running the full test suite.

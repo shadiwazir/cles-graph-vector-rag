@@ -1,0 +1,19 @@
+# Development set for retrieval: lawyer-style questions with the decision(s) that should be
+# retrieved. Hand-written from the 15 sample decisions (not training data). Replace or extend with
+# lawyer-labelled questions on the real corpus.
+cases:
+  - {q: "Can the Crown get a sentence increased on appeal for child luring and sexual interference with a 14-year-old?", expect: ["2026 ONCA 719"]}
+  - {q: "When can an appeal court reduce a sentence imposed after a finding of significant danger to children?", expect: ["2026 ONCA 727"]}
+  - {q: "Sentencing judge misunderstood prior firearm record and ignored credit for strict house arrest bail", expect: ["2026 ONCA 717"]}
+  - {q: "Can a court dismiss my appeal as frivolous and vexatious without a hearing under rule 2.1?", expect: ["2026 ONCA 724"]}
+  - {q: "Extradition committal challenged because voice identification evidence in the record of the case is unreliable", expect: ["2026 ONCA 713"]}
+  - {q: "Appeal from a sexual assault conviction arguing the edited transcript of a recorded conversation should not have been admitted", expect: ["2026 ONCA 714"]}
+  - {q: "Crown appeals acquittals where the trial judge focused only on self-defence and ignored who started the assault", expect: ["2026 ONCA 715"]}
+  - {q: "Is a trial judge's identification of an accused by someone who knew him casually enough to support an aggravated assault conviction?", expect: ["2026 ONCA 721"]}
+  - {q: "Review board continued detention of an accused with schizophrenia; is a conditional discharge appropriate?", expect: ["2026 ONCA 722"]}
+  - {q: "Municipal by-law prohibiting people from entering a park, application remitted to be heard again", expect: ["2026 ONCA 726"]}
+  - {q: "Impaired boat operator acquitted after a crash killing passengers, Crown argues care or control and criminal negligence", expect: ["2026 ONCA 728"]}
+  - {q: "Does a force majeure clause excuse rent when government orders closed a leased fitness facility during the pandemic?", expect: ["2026 ONCA 708"]}
+  - {q: "Was a claim statute-barred because the limitation period had expired before the claim was discovered?", expect: ["2026 ONCA 709"]}
+  - {q: "Leave to appeal a costs order and the amount of costs awarded against unsuccessful appellants", expect: ["2026 ONCA 716"]}
+  - {q: "Preliminary inquiry judge discharged the accused on first degree murder for lack of evidence of planning and deliberation: jurisdictional error?", expect: ["2018 ONCA 238"]}

@@ -1,0 +1,2 @@
+# Domain rules from the user (legal)
+- Disposition for sentence appeals: if the sentence is reduced but not removed, the appeal is "appeal_allowed_in_part" (neither dismissed nor fully allowed). User confirmed 727 and 717 labels as correct (2026-11-14). Not yet in the extraction prompt: add with the next prompt revision (would change schema_version -> re-extraction, about $0.2 for 15 docs). Open question: 719 (Crown appeal, sentence increased 2y -> 4y) is currently appeal_allowed; ask user whether sentence changes in either direction should map to allowed_in_part.

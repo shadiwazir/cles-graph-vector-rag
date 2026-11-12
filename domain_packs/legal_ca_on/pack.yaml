@@ -13,3 +13,7 @@ leak_check:
     - '(?i)\bappeals?\b.{0,15}\b(is|are|was|were|has been|have been)\b.{0,15}\b(dismissed|allowed|granted|successful)'
     - '(?i)\bnew trial\b.{0,20}\b(is|was|will be|has been)\b.{0,10}\bordered'
     - '(?i)\b(i|we) would (allow|dismiss)\b'
+disclaimer: >-
+  This output is decision support for a qualified lawyer. It is not legal advice and must be
+  reviewed before use. Statutes and case law may have changed after the corpus date.
+scope: Court of Appeal for Ontario decisions only.

@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     embedding_device: Literal["auto", "cpu", "cuda"] = "auto"
     embedding_batch_size: int = 32
 
+    audit_store_question: bool = False  # store question text in request_audit (privacy: off)
+
+    # Retrieval
+    retrieval_k: int = 8  # passages in the context pack
+    retrieval_candidates: int = 30  # per search before fusion
+    rrf_k: int = 60
+    reranker_model: str | None = None  # e.g. BAAI/bge-reranker-base; None disables reranking
+    evidence_strong_distance: float = 0.35  # cosine distance
+    evidence_weak_distance: float = 0.45
+
     # Project
     domain_pack: str = "legal_ca_on"
     data_dir: Path = Path("data")
@@ -55,7 +65,8 @@ class Settings(BaseSettings):
 
     # Tracking and telemetry
     mlflow_tracking_uri: str = "http://localhost:5000"
-    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
+    telemetry_enabled: bool = False  # export traces and metrics to the OTLP endpoint
+    otel_exporter_otlp_endpoint: str = "http://localhost:4318"  # OTLP over HTTP
     telemetry_capture_content: Literal["none", "redacted", "full"] = "redacted"
     telemetry_retention_days: int = 30
 

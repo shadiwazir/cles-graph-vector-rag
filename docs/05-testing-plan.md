@@ -32,6 +32,15 @@ Run: `uv run pytest`, `uv run ruff check .`.
 - Graph writer on Neo4j: idempotent re-write, replaced relationships, cited stubs keep `in_corpus` correct (skipped when Neo4j is unreachable).
 - With a real model: every sample document reaches `ok`; outputs are reviewed by hand against the PDFs (stage cuts must not contain reasoning or the disposition).
 
+## Phase 3 acceptance
+
+- Retrieval: relevant case ranked first for a targeted question; `as_of` removes the case itself and later cases; excluded ids never return; an unrelated question gives weak evidence.
+- Verifier: unknown case, after-`as_of` case, missing paragraph and invented quote are each rejected and removed; real quotes pass; ellipsis quotes keep order.
+- Advisor: failed citations are removed and counted; model confidence is capped by retrieval; generation failure is reported; an audit row is written without question text.
+- Guard: the API refuses to start with an external generator unless explicitly allowed.
+- Telemetry: spans and metrics reach Phoenix and Prometheus; the span carries no case text by default.
+- Evaluation dev set: recall@1 and MRR reported (all 1.0 on the 15-decision sample, a plumbing check only).
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

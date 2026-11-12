@@ -42,6 +42,21 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | Load the sample graph from real extractions | done: 118 Case nodes (15 in corpus), 106 citations |
 | Split outcome into disposition and remedy | done (ADR 0012), re-extracted on 15 samples |
 
+## Phase 3: Retrieval, advisor, evaluation baseline
+
+| Task | Status |
+|------|--------|
+| Vector + full-text search, RRF, `as_of` and self-exclusion | done |
+| Cypher templates seeded by passage hits (profile, citations, related cases) | done |
+| Optional reranker | done, no real model tried |
+| LLM query analysis | deferred (ADR 0013) |
+| Citation verifier | done |
+| FastAPI service with generator guard and `request_audit` | done, tested with a fake generator |
+| Run the API with a real model on a public sample question | waiting for the user's approval (paid call) |
+| Evaluation harness (retrieval metrics, optional generation metrics) | done; generation metrics not yet run |
+| OpenTelemetry, Phoenix, Prometheus, Grafana (profile `observability`) | done, verified |
+| `record_manifest` stage | done |
+
 ## Later phases
 
 See `INSTRUCTIONS.md` section 15.

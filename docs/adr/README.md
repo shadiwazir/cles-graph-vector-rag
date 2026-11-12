@@ -17,3 +17,4 @@ decision gets a new ADR that supersedes the old one.
 | 0010 | Provider interface and external-generator guard |
 | 0011 | JSON-mode extraction and a declarative graph mapping |
 | 0012 | Disposition and remedy as separate outcome facets |
+| 0013 | Retrieval, verification and advisor design |

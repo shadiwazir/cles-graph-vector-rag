@@ -28,6 +28,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [gr.3] | Local LLM (Ollama) trial | docs/03 |
 | [gr.4] | OpenAI extraction run (gpt-5.4-mini) | docs/04 |
 | [gr.5] | Disposition and remedy split | ADR 0012, docs/03 |
+| [rt.3] | Phase 3 build notes | ADR 0013, docs/03 |
 | [ml.1] | Fine-tuning stack | ADR 0003 |
 | [ml.2] | Stage cuts and leakage | ADR 0008 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |

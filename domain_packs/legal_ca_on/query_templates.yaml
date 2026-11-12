@@ -12,12 +12,33 @@ templates:
     WHERE i.issue_id IN $issue_ids AND c.decision_date < $as_of
     RETURN o.label AS outcome, count(c) AS cases
     ORDER BY cases DESC
-  good_law_authorities: |
+  # The cited case is older than the citing case by nature, so only the citing case is dated.
+  citation_treatment: |
     MATCH (c:Case)-[r:CITES]->(a:Case)
-    WHERE c.case_id IN $case_ids AND a.decision_date < $as_of
-    RETURN a.case_id AS case_id, r.treatment AS treatment
+    WHERE c.case_id IN $case_ids AND c.decision_date < $as_of
+    RETURN c.case_id AS citing, a.case_id AS cited, r.treatment AS treatment, r.para AS para
+    LIMIT 100
+  case_profile: |
+    MATCH (c:Case)
+    WHERE c.case_id IN $case_ids AND c.decision_date < $as_of
+    RETURN c.case_id AS case_id, c.title AS title, toString(c.decision_date) AS decision_date,
+           head([(c)-[:RESULTED_IN]->(o) | o.label]) AS outcome,
+           [(c)-[:ORDERED]->(m) | m.label] AS remedies,
+           [(c)-[:APPLIED]->(p) | p.section] AS provisions,
+           [(c)-[:RAISED]->(i) | i.name] AS issues
+  related_cases_by_provision: |
+    MATCH (c:Case)-[:APPLIED]->(p:StatuteProvision)<-[:APPLIED]-(r:Case)
+    WHERE c.case_id IN $case_ids AND NOT r.case_id IN $case_ids
+      AND c.decision_date < $as_of AND r.decision_date < $as_of
+    RETURN r.case_id AS case_id, r.title AS title, count(DISTINCT p) AS shared_provisions
+    ORDER BY shared_provisions DESC
+    LIMIT $limit
   remedies_by_issue: |
     MATCH (c:Case)-[:RAISED]->(i:LegalIssue), (c)-[:ORDERED]->(m:Remedy)
     WHERE i.issue_id IN $issue_ids AND c.decision_date < $as_of
     RETURN m.label AS remedy, count(c) AS cases
     ORDER BY cases DESC
+  overruled_by: |
+    MATCH (x:Case)-[r:CITES {treatment: 'overruled'}]->(a:Case)
+    WHERE a.case_id IN $case_ids AND x.decision_date < $as_of
+    RETURN a.case_id AS case_id, x.case_id AS overruled_by

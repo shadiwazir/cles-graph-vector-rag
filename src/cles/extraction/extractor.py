@@ -5,11 +5,10 @@ import json
 import re
 from dataclasses import dataclass
 
-from jsonschema import Draft202012Validator
-
 from cles.domain.pack import DomainPack
 from cles.ingestion.chunker import count_tokens
 from cles.llm.base import LLMClient
+from cles.llm.structured import ask_for_json
 
 MAX_ATTEMPTS = 3  # first try plus two retries that show the model what was wrong
 
@@ -104,41 +103,24 @@ def extract_document(
     text: str,
     known: dict | None = None,
 ) -> ExtractionOutcome:
-    validator = Draft202012Validator(pack.extraction_schema)
-    messages = build_messages(pack, header, text, known)
-    tokens_in = tokens_out = 0
-    problem = "no attempt made"
-    for _ in range(MAX_ATTEMPTS):
-        try:
-            reply = client.complete_json(messages)
-        except Exception as exc:  # provider errors: record and let the run continue
-            return ExtractionOutcome(doc_id, "failed", {}, tokens_in, tokens_out, str(exc))
-        tokens_in += reply.input_tokens
-        tokens_out += reply.output_tokens
-        try:
-            result = json.loads(reply.text)
-        except json.JSONDecodeError as exc:
-            problem = f"reply is not valid JSON: {exc}"
-        else:
-            if isinstance(result, dict):
-                result = tidy(result, pack.extraction_schema)
-                result.update(known or {})  # parser-known fields win over the model
-            errors = sorted(validator.iter_errors(result), key=lambda e: list(e.path))
-            leaks = [] if errors else find_leaks(result, pack)
-            if not errors and not leaks:
-                return ExtractionOutcome(doc_id, "ok", result, tokens_in, tokens_out)
-            if leaks:
-                problem = "; ".join(leaks)
-            else:
-                problem = "; ".join(
-                    f"{'/'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors[:5]
-                )
-        messages = [
-            *messages,
-            {"role": "assistant", "content": reply.text},
-            {
-                "role": "user",
-                "content": f"That JSON was rejected: {problem}. Return a corrected JSON object.",
-            },
-        ]
-    return ExtractionOutcome(doc_id, "invalid", {}, tokens_in, tokens_out, problem)
+    def prepare(result: dict) -> dict:
+        result = tidy(result, pack.extraction_schema)
+        result.update(known or {})  # parser-known fields win over the model
+        return result
+
+    outcome = ask_for_json(
+        client,
+        build_messages(pack, header, text, known),
+        pack.extraction_schema,
+        attempts=MAX_ATTEMPTS,
+        prepare=prepare,
+        extra_check=lambda result: find_leaks(result, pack),
+    )
+    return ExtractionOutcome(
+        doc_id,
+        outcome.status,
+        outcome.result,
+        outcome.input_tokens,
+        outcome.output_tokens,
+        outcome.error,
+    )

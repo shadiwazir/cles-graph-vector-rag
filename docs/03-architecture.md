@@ -43,7 +43,11 @@ flowchart LR
 | `llm/` | `LLMClient` protocol, OpenAI-compatible client, cost estimate | done |
 | `extraction/extractor.py`, `extract.py` | Prompt, JSON validation, one retry; `extract` stage with cache, threads, dry-run estimate | done |
 | `graph/client.py`, `writer.py`, `load.py` | Constraints from the pack; generic mapping-driven writer; `graph_load` stage | done |
-| `retrieval/`, `inference/`, `evaluation/` | Phase 3 | planned |
+| `retrieval/` | `search` (pgvector, full-text), `fusion` (RRF), `graph` (Cypher templates), `rerank` (optional), `hybrid` (`HybridRetriever`, evidence strength) | done |
+| `inference/` | `prompt`, `advisor`, `verifier`, `guard`, `app` (FastAPI) | done |
+| `evaluation/` | `retrieval` metrics, `run` (`evaluate` stage, optional generation) | done |
+| `observability/telemetry.py`, `metrics.py` | OpenTelemetry setup, spans, metrics | done |
+| `manifest.py` | `record_manifest` stage (`build_manifest` row) | done |
 | `training/` | Phases 4 and 5 | planned |
 
 ## Infrastructure (`infra/`)
@@ -110,3 +114,47 @@ Commands: `cles run extract graph_load` (`--dry-run` on `extract` prints token a
 - Local models: any OpenAI-compatible endpoint works, for example Ollama (`LLM_BASE_URL=http://localhost:11434/v1`, `OPENAI_API_KEY=ollama`, `LLM_MODEL=<name>`). Ollama's default context is small; use a model variant with `num_ctx 16384` or more. 1B-class models (qwen2.5:1.5b, gemma3:1b) reached only 5 and 3 valid results out of 15 and were semantically weak, so they are only useful for testing the pipeline.
 - Leakage guard in extraction: the pack's `leak_check` (regexes on each stage's `known_so_far`) rejects text that describes the Court of Appeal's own decision; the reason is sent back to the model in the retry, and a second failure stores the row as `invalid`. Prompt v1 defines the four stages as cumulative and forbids hindsight.
 - Outcome facets: `outcome` is the disposition (one value); `remedies` is a list. A schema rule rejects remedies on a dismissed appeal. Graph: `Case-[:RESULTED_IN]->Outcome`, `Case-[:ORDERED]->Remedy`.
+
+## Runtime (Phase 3)
+
+```mermaid
+sequenceDiagram
+    actor L as Lawyer
+    participant API as FastAPI /advise
+    participant R as HybridRetriever
+    participant PG as Postgres
+    participant N as Neo4j
+    participant G as Generator (OpenAI-compatible)
+    participant V as CitationVerifier
+    L->>API: case text + question
+    API->>R: retrieve(query, as_of)
+    R->>PG: vector search + full-text, fused by RRF
+    R->>N: case_profile, citation_treatment, related_cases (seeded by hits)
+    R-->>API: ContextPack (passages, graph facts, evidence strength)
+    API->>G: prompt (case, question, passages, graph facts)
+    G-->>API: advice JSON (validated, up to 3 attempts)
+    API->>V: check every cited case, paragraph, quote
+    V-->>API: verified advice, removed citations, warnings
+    API->>PG: request_audit row
+    API-->>L: advice, sources, warnings, scope, disclaimer
+```
+
+Run: `uv run uvicorn cles.inference.app:create_app --factory --port 8000`, then `POST /advise` with `case_text`, `question` (optional `as_of` for evaluation). The app refuses to start if `LLM_BASE_URL` is external and `ALLOW_EXTERNAL_GENERATOR` is not `true`; use public or synthetic cases only in that mode. Design decisions: ADR 0013.
+
+## Observability (Phase 3)
+
+```mermaid
+flowchart LR
+    A[API and stages] -->|OTLP HTTP :4318| C[OTel Collector]
+    C -->|traces| P[Phoenix :6006]
+    C -->|metrics| M[Prometheus :9090]
+    M --> G[Grafana :3000 dashboard CLES overview]
+    A -->|JSON logs| F[stderr]
+    A --> D[(request_audit)]
+```
+
+Start: set `GRAFANA_PASSWORD` in `.env`, then `docker compose --env-file .env -f infra/docker-compose.yml --profile observability up -d`; set `TELEMETRY_ENABLED=true`. Metrics: `cles_advise_duration_milliseconds`, `cles_answers_total{evidence}`, `cles_citations_total{result}`, `cles_llm_tokens_total{direction}`, `cles_stage_runs_total{stage,status}`. Spans carry counts and timings; question text is redacted unless `TELEMETRY_CAPTURE_CONTENT=full`.
+
+## Evaluation (Phase 3)
+
+`cles run evaluate` runs `eval/retrieval_dev.yaml` (15 hand-written questions, one expected decision each) and writes `artifacts/eval/<run_id>.json` with recall@1/3/5 and MRR. `python -m cles.evaluation.run --with-generation` also calls the generator and reports citation pass rate, weak-evidence share and latency (paid, public or synthetic questions only). With 15 distinct decisions the retrieval numbers are a plumbing check, not a quality measure.

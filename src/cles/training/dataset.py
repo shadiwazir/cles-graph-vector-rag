@@ -49,6 +49,7 @@ def render_hindsight(extraction: dict, stage_item: dict) -> str:
     """What actually happened, for the target writer only. It never enters the example input."""
     lines = [
         "HINDSIGHT (what actually happened; never reveal it):",
+        f"- STAGE: {stage_item.get('stage')}",
         f"- outcome: {extraction.get('outcome')}",
         f"- remedies: {extraction.get('remedies', [])}",
         f"- issues: {extraction.get('issues', [])}",

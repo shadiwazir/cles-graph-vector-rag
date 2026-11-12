@@ -88,6 +88,7 @@ def make_advice(conn, quote="invented words that are in no decision"):
     route = {
         "name": "Crown appeal",
         "description": "d",
+        "next_event": "The appeal is heard.",
         "expected_outcome": "appeal_allowed",
         "likelihood": "medium",
         "reasoning": "r",
@@ -98,6 +99,7 @@ def make_advice(conn, quote="invented words that are in no decision"):
         ],
     }
     return {
+        "stage": "grounds_of_appeal",
         "case_position": "p",
         "routes": [route],
         "risks": ["r"],

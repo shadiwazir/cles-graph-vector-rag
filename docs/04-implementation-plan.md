@@ -67,7 +67,7 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | Leakage rules L1-L5 as code, plus independent `check_dataset` stage | done |
 | Run on the 15 samples (59 examples) | done: 47 train, 12 eval, 0 leakage violations, about $0.55 |
 | Add the dataset to DVC | done (`artifacts/datasets.dvc`) |
-| Decide how early stages should be framed (see below) | open question for the user |
+| Stage-aware advice for early stages (ADR 0015) | done, dataset rebuilt (59 examples) |
 
 ## Later phases
 

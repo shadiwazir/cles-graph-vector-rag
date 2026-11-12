@@ -17,3 +17,4 @@ disclaimer: >-
   This output is decision support for a qualified lawyer. It is not legal advice and must be
   reviewed before use. Statutes and case law may have changed after the corpus date.
 scope: Court of Appeal for Ontario decisions only.
+likelihood_caps_by_stage: {facts: medium, procedural_history: medium}

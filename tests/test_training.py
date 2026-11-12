@@ -79,7 +79,8 @@ CONTEXT = ContextPack([PASSAGE], {}, "moderate", ["2020 ONCA 5"])
 
 
 def spec(outcome="appeal_allowed", remedies=("new_trial_ordered",)):
-    return TargetSpec("2026 ONCA 9", "R. v. Boat", outcome, remedies, CONTEXT)
+    stage = "grounds_of_appeal"
+    return TargetSpec("2026 ONCA 9", "R. v. Boat", stage, outcome, remedies, CONTEXT)
 
 
 def advice(outcome="appeal_allowed", remedies=("new_trial_ordered",), authorities=None, text="x"):
@@ -91,6 +92,7 @@ def advice(outcome="appeal_allowed", remedies=("new_trial_ordered",), authoritie
     route = {
         "name": "Appeal",
         "description": text,
+        "next_event": "The appeal is heard by a panel.",
         "expected_outcome": outcome,
         "expected_remedies": list(remedies),
         "likelihood": "high",
@@ -98,6 +100,7 @@ def advice(outcome="appeal_allowed", remedies=("new_trial_ordered",), authoritie
         "authorities": auth,
     }
     return {
+        "stage": "grounds_of_appeal",
         "case_position": text,
         "routes": [route],
         "risks": [],
@@ -271,3 +274,37 @@ def test_target_must_not_name_its_briefing():
     for word in ("hindsight", "actual next event"):
         problems = check_target(advice(text=f"given the {word} the appeal wins"), spec())
         assert any("write as if" in p for p in problems), word
+
+
+def test_stage_must_match_the_example():
+    wrong = advice()
+    wrong["stage"] = "facts"
+    assert any("stage must be" in p for p in check_target(wrong, spec()))
+
+
+def test_hindsight_block_carries_the_stage_for_the_writer_only():
+    text = render_hindsight(DOCS[0].extraction, DOCS[0].extraction["stages"][1])
+    assert "STAGE: grounds_of_appeal" in text
+
+
+def test_early_stage_first_route_must_not_be_named_like_an_appeal_result():
+    early = TargetSpec(
+        "2026 ONCA 9",
+        "R. v. Boat",
+        "facts",
+        "appeal_allowed",
+        ("new_trial_ordered",),
+        CONTEXT,
+        tuple(PACK.training.early_stages),
+        tuple(PACK.training.early_route_name_patterns),
+    )
+    named_like_result = advice()
+    named_like_result["stage"] = "facts"
+    named_like_result["routes"][0]["name"] = "Appeal allowed; convictions set aside"
+    assert any("reads as an appeal result" in p for p in check_target(named_like_result, early))
+    path = advice()
+    path["stage"] = "facts"
+    path["routes"][0]["name"] = "Contest the charges at trial"
+    assert check_target(path, early) == []
+    # the same name is fine once a decision exists
+    assert not any("reads as" in p for p in check_target(advice(), spec()))

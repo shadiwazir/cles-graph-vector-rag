@@ -19,3 +19,4 @@ decision gets a new ADR that supersedes the old one.
 | 0012 | Disposition and remedy as separate outcome facets |
 | 0013 | Retrieval, verification and advisor design |
 | 0014 | Training targets: hindsight-conditioned, evidence-capped, context-only citations |
+| 0015 | Stage-aware advice: procedural paths first, appeal result downstream |

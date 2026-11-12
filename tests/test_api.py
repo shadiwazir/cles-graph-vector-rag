@@ -19,6 +19,7 @@ class Generator:
 
     def complete_json(self, messages):
         advice = {
+            "stage": "facts",
             "case_position": "p",
             "routes": [],
             "risks": [],

@@ -100,9 +100,12 @@ def prepare_examples(
             spec = TargetSpec(
                 doc.doc_id,
                 doc.title,
+                stage,
                 doc.extraction["outcome"],
                 tuple(doc.extraction.get("remedies", [])),
                 context,
+                tuple(pack.training.early_stages),
+                tuple(pack.training.early_route_name_patterns),
             )
             prepared.append(
                 Prepared(

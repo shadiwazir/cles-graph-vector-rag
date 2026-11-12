@@ -113,7 +113,7 @@ class Advisor:
             warnings += report.warnings()
             strength = _weaker(outcome.result.get("evidence_strength", strength), strength)
             advice["evidence_strength"] = strength
-            warnings += cap_likelihood(advice, strength)
+            warnings += cap_likelihood(advice, strength, self._pack.info.likelihood_caps_by_stage)
         else:
             warnings.append(f"generation failed: {outcome.error}")
         if strength == "weak":

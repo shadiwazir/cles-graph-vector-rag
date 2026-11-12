@@ -48,6 +48,8 @@ Run: `uv run pytest`, `uv run ruff check .`.
 - Targets: first route equals the real outcome and remedies; authorities and quotes come from the example's retrieved passages; no self-mention; likelihood capped by evidence; retries with feedback; failures are cached and reported.
 - Leakage: each of L1 to L5 has a test that a violating example is caught; `check_dataset` passes on a built dataset.
 
+- Stage-aware advice: early-stage routes may omit `expected_outcome`, later stages must have it; `stage` equals the example's stage; early first-route names that read as an appeal result are rejected; likelihood is capped by evidence and by stage.
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

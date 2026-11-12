@@ -3,6 +3,7 @@
   "title": "Advice",
   "type": "object",
   "required": [
+    "stage",
     "case_position",
     "routes",
     "risks",
@@ -21,7 +22,7 @@
         "required": [
           "name",
           "description",
-          "expected_outcome",
+          "next_event",
           "likelihood",
           "reasoning",
           "authorities"
@@ -88,6 +89,10 @@
                 "leave_to_appeal_granted"
               ]
             }
+          },
+          "next_event": {
+            "type": "string",
+            "minLength": 10
           }
         },
         "allOf": [
@@ -137,6 +142,42 @@
         "moderate",
         "strong"
       ]
+    },
+    "stage": {
+      "enum": [
+        "facts",
+        "procedural_history",
+        "lower_court_decision",
+        "grounds_of_appeal"
+      ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "enum": [
+              "lower_court_decision",
+              "grounds_of_appeal"
+            ]
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "routes": {
+            "items": {
+              "required": [
+                "expected_outcome"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

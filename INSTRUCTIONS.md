@@ -323,16 +323,19 @@ Every stage below follows the contract above.
 
 ## 8. Output schema (advice)
 
-The model must output JSON matching the pack's `advice_schema.json`. Generic skeleton:
+The model must output JSON matching the pack's `advice_schema.json`. Generic skeleton (the legal pack's values are shown):
 
 ```json
 {
+  "stage": "facts | procedural_history | lower_court_decision | grounds_of_appeal",
   "case_position": "string",
   "routes": [
     {
       "name": "string",
       "description": "string",
-      "expected_outcome": "label from outcomes.yaml",
+      "next_event": "string",
+      "expected_outcome": "label from outcomes.yaml (optional before a decision exists)",
+      "expected_remedies": ["label from the remedies list in outcomes.yaml"],
       "likelihood": "low | medium | high",
       "reasoning": "string",
       "authorities": [{"case_id": "2026 ONCA 719", "para": 41, "quote": "string"}]
@@ -345,7 +348,13 @@ The model must output JSON matching the pack's `advice_schema.json`. Generic ske
 }
 ```
 
-`evidence_strength` reflects how much relevant material retrieval found. When it is `weak`, the answer must say so instead of sounding confident.
+Rules:
+
+- `stage` is where the case stands now, identified by the model from the case description. The stages come from the pack (they are the stage cuts of section 9.1).
+- Each route is a realistic path from the current stage, with its `next_event`. Before a decision exists (early stages) routes are procedural paths, and `expected_outcome` is optional: it is the disposition expected if the path reaches the appeal court. From the first decided stage on, every route has `expected_outcome`. A dismissed disposition has no remedies.
+- `expected_outcome` and `expected_remedies` take only the values in `outcomes.yaml`.
+- `evidence_strength` reflects how much relevant material retrieval found; the answer carries the weaker of the model's rating and retrieval's. When it is `weak`, the answer must say so instead of sounding confident.
+- `likelihood` is capped in code by the evidence (weak: low, moderate: medium, strong: high) and by the stage (`likelihood_caps_by_stage` in `pack.yaml`; in the legal pack nothing is above medium before a decision exists). A lowered likelihood is reported as a warning.
 
 ---
 

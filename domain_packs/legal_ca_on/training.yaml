@@ -12,3 +12,13 @@ questions:
   grounds_of_appeal:
     - "The grounds of appeal are set. What outcome should we expect and how should we argue it?"
     - "Given the arguments on both sides, what are the likely outcomes and the key risks?"
+
+# At these stages no decision exists yet: routes are procedural paths, not appeal results.
+early_stages: [facts, procedural_history]
+early_route_name_patterns:
+  - '(?i)appeal (is |was )?(dismissed|allowed|succeeds|fails)'
+  - '(?i)(dismissal|allowance) of the appeal'
+  - '(?i)(sentence )?appeal (succeeds|fails)'
+  - '(?i)\bupheld\b|\bset aside\b'
+  - '(?i)\bnew trial (is |was )?ordered'
+  - '(?i)dismissed\b'

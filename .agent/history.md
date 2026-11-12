@@ -125,3 +125,13 @@
 - Done: user committed Phase 4 code and approved the paid build. Built dataset on 15 samples (59 examples, 0 violations), reviewed quality, added hindsight-word check + cache re-validation (2 regenerated), tracked artifacts/datasets with DVC and pushed. Notes in refs ml.3.
 - Files affected: src/cles/training/{target,build_dataset}.py, tests/test_training.py, .gitignore, artifacts/datasets.dvc, docs/03-04, refs.
 - Pending: user decision on early-stage framing (options A/B/C in ml.3), commit, Phase 4 sign-off, offer Phase 5.
+
+## 2026-11-16 Option B: stage-aware advice
+- Done: user committed and chose option B. Added stage + next_event to the advice schema (conditional expected_outcome), prompts v2, stage likelihood caps, early-stage route-name check, rebuilt dataset (59 examples, 0 violations, about $0.63 total), re-tracked with DVC. ADR 0015, docs, refs ml.4. 129 tests expected.
+- Files affected: domain_packs/legal_ca_on/{advice_schema.json,advice_prompt.md,target_prompt.md,pack.yaml,training.yaml}, src/cles/{domain/pack.py,inference/calibration.py,inference/advisor.py,training/*}, tests/*, docs/*, artifacts/datasets.dvc.
+- Pending: user commit, decision on updating INSTRUCTIONS section 8, Phase 4 sign-off, offer Phase 5.
+
+## 2026-11-16 INSTRUCTIONS section 8 synced
+- Done: user asked to update INSTRUCTIONS.md section 8 to match the stage-aware advice schema (stage, next_event, optional expected_outcome early, expected_remedies, likelihood caps). Only section 8 changed.
+- Files affected: INSTRUCTIONS.md, .agent/history.md.
+- Pending: user commits; Phase 4 sign-off; offer Phase 5.

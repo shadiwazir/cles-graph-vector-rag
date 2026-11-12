@@ -68,6 +68,10 @@ class PackInfo(BaseModel):
         "Decision support for a qualified professional; not professional advice. Review before use."
     )
     scope: str = ""  # what the corpus covers, shown with every answer
+    # Highest likelihood allowed per stage (before a decision exists, results are uncertain).
+    likelihood_caps_by_stage: dict[str, Literal["low", "medium", "high"]] = Field(
+        default_factory=dict
+    )
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -145,11 +149,20 @@ class TrainingConfig(BaseModel):
     """Per-domain settings for building training examples."""
 
     questions: dict[str, list[str]]  # stage -> questions a user might ask at that stage
+    # Before a decision exists, a route is a procedural path, not an appeal result: at these
+    # stages the first route's name must not match the patterns.
+    early_stages: list[str] = Field(default_factory=list)
+    early_route_name_patterns: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _not_empty(self) -> "TrainingConfig":
         if not self.questions or any(not qs for qs in self.questions.values()):
             raise ValueError("every stage needs at least one question")
+        for pattern in self.early_route_name_patterns:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"invalid regex {pattern!r}: {exc}") from exc
         return self
 
 

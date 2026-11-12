@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 
 from cles.domain.pack import DomainPack
@@ -19,9 +20,12 @@ class TargetSpec:
 
     doc_id: str
     title: str
+    stage: str
     outcome: str
     remedies: tuple[str, ...]
     context: ContextPack
+    early_stages: tuple[str, ...] = ()
+    early_route_name_patterns: tuple[str, ...] = ()
 
 
 def build_target_messages(
@@ -46,7 +50,18 @@ def check_target(advice: dict, spec: TargetSpec) -> list[str]:
     routes = advice.get("routes", [])
     if not routes:
         return ["no routes"]
+    if advice.get("stage") != spec.stage:
+        problems.append(f"stage must be '{spec.stage}', got '{advice.get('stage')}'")
     top = routes[0]
+    if spec.stage in spec.early_stages:
+        for pattern in spec.early_route_name_patterns:
+            if re.search(pattern, top.get("name", "")):
+                problems.append(
+                    f"routes/0/name '{top.get('name')}' reads as an appeal result; before a "
+                    "decision exists, name the route after the procedural path (what the "
+                    "lawyer does or what happens next)"
+                )
+                break
     if top.get("expected_outcome") != spec.outcome:
         problems.append(
             f"routes/0/expected_outcome must equal '{spec.outcome}' (the first route matches "
@@ -103,5 +118,5 @@ def generate_target(
         return outcome
     advice = outcome.result
     advice["evidence_strength"] = spec.context.evidence_strength
-    cap_likelihood(advice, spec.context.evidence_strength)
+    cap_likelihood(advice, spec.context.evidence_strength, pack.info.likelihood_caps_by_stage)
     return StructuredResult("ok", advice, outcome.input_tokens, outcome.output_tokens)

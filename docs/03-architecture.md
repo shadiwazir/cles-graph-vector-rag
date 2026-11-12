@@ -183,3 +183,5 @@ flowchart TD
 Commands: `cles run build_dataset` (`--dry-run` retrieves and estimates cost; `--limit N`), then `cles run check_dataset`. Output in `artifacts/datasets/<run id>/`. Each line has `messages` (system, user, assistant) plus metadata (`doc_id`, `stage`, `as_of`, `split`, `context_docs`, `outcome`, `remedies`, `evidence_strength`). Settings: `TRAINING_EVAL_FRACTION` (default 0.1), `TRAINING_OUT_DIR`. The pack supplies `training.yaml` (questions per stage) and `target_prompt.md`. Design: ADR 0014.
 
 Cached targets are re-checked on every build with the current rules, so tightening a rule regenerates only the affected examples. The dataset folder is tracked with DVC (`artifacts/datasets.dvc`).
+
+Stage-aware advice (ADR 0015): the advice JSON has a `stage` and each route a `next_event`; `expected_outcome` is optional before a decision exists and required afterwards. Likelihood is capped by evidence and by stage (`likelihood_caps_by_stage` in `pack.yaml`). At early stages the dataset builder rejects first-route names that read as an appeal result (`early_route_name_patterns` in `training.yaml`).

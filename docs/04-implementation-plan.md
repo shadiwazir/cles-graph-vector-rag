@@ -65,8 +65,9 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | Stage-cut examples with runtime-identical prompts | done |
 | Target writer with checks, retries, likelihood cap, cache (`training_targets`, Flyway V3) | done, tested with a fake LLM |
 | Leakage rules L1-L5 as code, plus independent `check_dataset` stage | done |
-| Run on the 15 samples (59 examples) | waiting for the user's approval (paid; about $0.9 estimated) |
-| Add the dataset to DVC | after the first real build |
+| Run on the 15 samples (59 examples) | done: 47 train, 12 eval, 0 leakage violations, about $0.55 |
+| Add the dataset to DVC | done (`artifacts/datasets.dvc`) |
+| Decide how early stages should be framed (see below) | open question for the user |
 
 ## Later phases
 

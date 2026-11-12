@@ -265,3 +265,9 @@ def test_assembled_messages_are_the_runtime_prompt_plus_the_target():
     assert [m["role"] for m in e["messages"]] == ["system", "user", "assistant"]
     assert json.loads(e["messages"][2]["content"]) == {"routes": []}
     assert e["outcome"] == "appeal_dismissed" and isinstance(Prepared, type)
+
+
+def test_target_must_not_name_its_briefing():
+    for word in ("hindsight", "actual next event"):
+        problems = check_target(advice(text=f"given the {word} the appeal wins"), spec())
+        assert any("write as if" in p for p in problems), word

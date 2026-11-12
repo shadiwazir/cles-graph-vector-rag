@@ -65,6 +65,9 @@ def check_target(advice: dict, spec: TargetSpec) -> list[str]:
                     f"{authority.get('para')} and its quote are not in the retrieved passages"
                 )
     text = json.dumps(advice).casefold()
+    for leak in ("hindsight", "actual next event"):  # the writer must not name its own briefing
+        if leak in text:
+            problems.append(f"the answer mentions '{leak}'; write as if the outcome is unknown")
     for own in (spec.doc_id, spec.title):
         if own and own.casefold() in text:
             problems.append(f"the answer mentions this case itself ('{own}')")

@@ -181,3 +181,5 @@ flowchart TD
 ```
 
 Commands: `cles run build_dataset` (`--dry-run` retrieves and estimates cost; `--limit N`), then `cles run check_dataset`. Output in `artifacts/datasets/<run id>/`. Each line has `messages` (system, user, assistant) plus metadata (`doc_id`, `stage`, `as_of`, `split`, `context_docs`, `outcome`, `remedies`, `evidence_strength`). Settings: `TRAINING_EVAL_FRACTION` (default 0.1), `TRAINING_OUT_DIR`. The pack supplies `training.yaml` (questions per stage) and `target_prompt.md`. Design: ADR 0014.
+
+Cached targets are re-checked on every build with the current rules, so tightening a rule regenerates only the affected examples. The dataset folder is tracked with DVC (`artifacts/datasets.dvc`).

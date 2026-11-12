@@ -32,7 +32,13 @@ from cles.retrieval.types import ContextPack, SearchFilter
 from cles.stage import StageContext, stage_main
 from cles.training.dataset import DocInfo, assign_split, pick_question
 from cles.training.leakage import check_example, check_split
-from cles.training.target import TargetSpec, build_target_messages, generate_target, input_hash
+from cles.training.target import (
+    TargetSpec,
+    build_target_messages,
+    check_target,
+    generate_target,
+    input_hash,
+)
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +126,13 @@ def prepare_examples(
 
 
 def cached_target(conn: psycopg.Connection, item: Prepared, model: str) -> dict | None:
+    """A cached target that still passes the current checks (rules may have tightened since
+    it was generated; such a target is regenerated)."""
+    advice = _cached_row(conn, item, model)
+    return advice if advice is not None and not check_target(advice, item.spec) else None
+
+
+def _cached_row(conn: psycopg.Connection, item: Prepared, model: str) -> dict | None:
     row = conn.execute(
         "SELECT result FROM training_targets "
         "WHERE example_id = %s AND input_hash = %s AND model = %s AND status = 'ok'",

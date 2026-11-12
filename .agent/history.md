@@ -120,3 +120,8 @@
 - Done: (1) likelihood cap by evidence + advice schema enums/dismissed rule + prompt v1 (user-requested fixes); (2) Phase 4: pack training.yaml and target_prompt.md, Flyway V3 training_targets, training/{dataset,target,leakage,build_dataset,check_dataset}, ADR 0014, docs 03-05, refs ml.3. Tests with fake LLM and fake retriever for split, targets, L1-L5. Dry run on 15 samples: 59 examples, est $0.89.
 - Files affected: domain_packs/legal_ca_on/*, infra/postgres/migrations/V3__training_targets.sql, src/cles/training/*, src/cles/inference/{calibration,advisor}.py, src/cles/domain/pack.py, config.py, cli.py, tests/*, docs/*.
 - Pending: user approval for the paid build on 15 samples; then check_dataset, review examples, commit, Phase 4 sign-off, offer Phase 5.
+
+## 2026-11-16 First real training-data build
+- Done: user committed Phase 4 code and approved the paid build. Built dataset on 15 samples (59 examples, 0 violations), reviewed quality, added hindsight-word check + cache re-validation (2 regenerated), tracked artifacts/datasets with DVC and pushed. Notes in refs ml.3.
+- Files affected: src/cles/training/{target,build_dataset}.py, tests/test_training.py, .gitignore, artifacts/datasets.dvc, docs/03-04, refs.
+- Pending: user decision on early-stage framing (options A/B/C in ml.3), commit, Phase 4 sign-off, offer Phase 5.

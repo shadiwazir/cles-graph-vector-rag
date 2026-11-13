@@ -80,6 +80,15 @@ Each phase ends with a user confirmation. The system is testable after Phase 3, 
 | Throughput pilot, real training run | waiting for the real corpus (data building about $500) and the user's provider and model choice |
 | Cloud DVC remote | postponed (rsync for now, ADR 0016) |
 
+## Two goals and the current scope [pr.1]
+
+| Goal | Scope | Status |
+|------|-------|--------|
+| 1. Proof of concept and learning | about 100 decisions in `data/criminal_and_civil/`, full pipeline, small fine-tune | current focus |
+| 2. Production-grade product | the 10,000+ decision corpus, full evaluation, hardening | later, after goal 1 |
+
+The pipeline is driven by `scripts/pipeline.sh` (docs/07). Cost of goal 1 is in docs/06.
+
 ## Later phases
 
 See `INSTRUCTIONS.md` section 15.

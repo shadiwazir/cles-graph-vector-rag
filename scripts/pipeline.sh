@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# CLES pipeline driver: one entry point for every step, so a scheduler or CI job can call it.
+#
+#   scripts/pipeline.sh <step> [--limit N]
+#
+# Steps (run in this order by `all`):
+#   preflight   check tools, .env, PDFs, pack; run the unit tests
+#   infra       start Postgres + Neo4j (Flyway migrates the schema) and wait until healthy
+#   data        ingest embed build_indexes extract graph_load record_manifest   (extract is PAID)
+#   dataset     build_dataset check_dataset                                       (build_dataset is PAID)
+#   train       train_sft   (needs a GPU; on a laptop use `train-dry`)
+#   train-dry   train_sft --dry-run: leakage re-check, token statistics, template preview
+#   all         preflight infra data dataset train-dry
+#   status      row counts and the latest run summaries
+#   reset       DESTROY the Postgres and Neo4j volumes (needs CONFIRM_RESET=1)
+#
+# Paid steps first run the stage with --dry-run and print the estimate. They only go on when
+# CONFIRM_PAID=1 is set and the estimate is at most MAX_COST_USD. Exit codes: 0 ok, 1 stage
+# failed, 2 bad usage or missing input, 3 paid step not confirmed, 4 estimate above the ceiling.
+#
+# Environment (all optional; .env is read first):
+#   PIPELINE_DATA_DIR  folder with the PDFs (overrides DATA_DIR in .env)   (default data/criminal_and_civil)
+#   CONFIRM_PAID   1 to allow paid LLM calls                 (default unset)
+#   MAX_COST_USD   ceiling for one paid step's estimate      (default 10)
+#   LLM_PRICE_INPUT_PER_MTOK / LLM_PRICE_OUTPUT_PER_MTOK     (defaults 0.75 / 4.50, unverified)
+#   PIPELINE_LOG_DIR  where logs go                          (default artifacts/pipeline)
+#   SKIP_TESTS     1 to skip pytest in preflight
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+export DATA_DIR="${PIPELINE_DATA_DIR:-data/criminal_and_civil}"
+export LLM_PRICE_INPUT_PER_MTOK="${LLM_PRICE_INPUT_PER_MTOK:-0.75}"
+export LLM_PRICE_OUTPUT_PER_MTOK="${LLM_PRICE_OUTPUT_PER_MTOK:-4.50}"
+MAX_COST_USD="${MAX_COST_USD:-10}"
+COMPOSE=(docker compose --env-file .env -f infra/docker-compose.yml)
+
+LOG_ROOT="${PIPELINE_LOG_DIR:-artifacts/pipeline}"
+RUN_TAG="$(date +%Y%m%d-%H%M%S)"
+LOG_DIR="$LOG_ROOT/$RUN_TAG"
+
+STEP="${1:-}"
+[[ $# -gt 0 ]] && shift
+LIMIT_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --limit) LIMIT_ARGS=(--limit "$2"); shift 2 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf '[pipeline %s] %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
+die() { say "ERROR: $*"; exit "${2:-1}"; }
+
+# Run stages through the thin runner; keep each JSON summary line in the log folder.
+run_stages() {
+  mkdir -p "$LOG_DIR"
+  for stage in "$@"; do
+    say "stage $stage"
+    local out="$LOG_DIR/$stage.log"
+    if ! uv run cles run "$stage" "${LIMIT_ARGS[@]}" 2>"$out.err" | tee "$out" >>"$LOG_DIR/summary.jsonl"; then
+      tail -5 "$out.err" >&2
+      die "stage $stage failed (see $out and $out.err)"
+    fi
+    tail -1 "$out" | cut -c1-400 >&2
+  done
+}
+
+# Paid gate: estimate with --dry-run, compare with the ceiling, require explicit confirmation.
+paid_gate() {
+  local stage="$1" est
+  est="$(uv run cles run "$stage" --dry-run "${LIMIT_ARGS[@]}" 2>/dev/null | tail -1 \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("est_cost_usd"))')"
+  say "$stage estimate: ${est} USD (ceiling $MAX_COST_USD; prices unverified, real cost can be higher)"
+  [[ "$est" == "None" ]] && die "no estimate: set LLM_PRICE_INPUT_PER_MTOK and LLM_PRICE_OUTPUT_PER_MTOK" 2
+  python3 -c "import sys; sys.exit(0 if float('$est') <= float('$MAX_COST_USD') else 1)" \
+    || die "estimate above MAX_COST_USD" 4
+  [[ "${CONFIRM_PAID:-}" == "1" ]] || die "paid step not confirmed: rerun with CONFIRM_PAID=1" 3
+}
+
+step_preflight() {
+  command -v uv >/dev/null || die "uv not found" 2
+  command -v docker >/dev/null || die "docker not found" 2
+  [[ -f .env ]] || die ".env missing: cp .env.example .env and fill it in" 2
+  for var in POSTGRES_PASSWORD NEO4J_PASSWORD LLM_MODEL OPENAI_API_KEY; do
+    [[ -n "${!var:-}" ]] || die "$var is empty in .env" 2
+  done
+  local pdfs
+  pdfs="$(find "$DATA_DIR" -maxdepth 1 -name '*.pdf' 2>/dev/null | wc -l)"
+  [[ "$pdfs" -gt 0 ]] || die "no PDFs in $DATA_DIR" 2
+  say "$pdfs PDFs in $DATA_DIR"
+  uv sync --extra embed --quiet
+  if [[ "${SKIP_TESTS:-}" != "1" ]]; then uv run pytest -q >&2 || die "tests failed"; fi
+  run_stages validate_pack
+}
+
+step_infra() {
+  "${COMPOSE[@]}" up -d postgres neo4j >&2
+  for _ in $(seq 1 30); do
+    local bad
+    bad="$("${COMPOSE[@]}" ps --format '{{.Name}} {{.Health}}' postgres neo4j | grep -vc healthy || true)"
+    [[ "$bad" == "0" ]] && { say "postgres and neo4j healthy"; return; }
+    sleep 5
+  done
+  die "services did not become healthy"
+}
+
+step_data() {
+  run_stages ingest embed build_indexes
+  paid_gate extract
+  run_stages extract graph_load record_manifest
+}
+
+step_dataset() {
+  paid_gate build_dataset
+  run_stages build_dataset check_dataset
+}
+
+step_train() { run_stages train_sft; }
+
+step_train_dry() {
+  mkdir -p "$LOG_DIR"
+  uv run cles run train_sft --dry-run 2>"$LOG_DIR/train_dry.err" | tee "$LOG_DIR/train_dry.log" >>"$LOG_DIR/summary.jsonl" \
+    || die "train dry run failed (see $LOG_DIR/train_dry.err)"
+}
+
+step_status() {
+  "${COMPOSE[@]}" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+    "select 'documents' t, count(*) from documents union all select 'chunks', count(*) from chunks
+     union all select 'extractions', count(*) from extractions union all select 'training_targets', count(*) from training_targets"
+  "${COMPOSE[@]}" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+    "select stage, status, started_at from ingestion_runs order by started_at desc limit 8" || true
+  ls -1d artifacts/datasets/*/ 2>/dev/null | tail -3 || true
+}
+
+step_reset() {
+  [[ "${CONFIRM_RESET:-}" == "1" ]] || die "reset deletes all Postgres and Neo4j data (extraction cache included): rerun with CONFIRM_RESET=1" 3
+  "${COMPOSE[@]}" down -v >&2
+}
+
+case "$STEP" in
+  preflight) step_preflight ;;
+  infra) step_infra ;;
+  data) step_data ;;
+  dataset) step_dataset ;;
+  train) step_train ;;
+  train-dry) step_train_dry ;;
+  all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
+  status) step_status ;;
+  reset) step_reset ;;
+  *) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+esac
+say "step $STEP done (logs: $LOG_DIR)"

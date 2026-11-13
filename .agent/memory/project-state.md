@@ -7,3 +7,5 @@
 - 2026-10-22: AGENTS.md + INSTRUCTIONS.md drafted on disk, awaiting user approval. Product = lawyer-facing advisory copilot (any-stage case input -> routes/risks/next steps with verified citations). Stack decisions: Unsloth+TRL, domain packs, OpenAI default via provider interface, pgvector+Neo4j, vLLM serving.
 - HINT (keep OUT of INSTRUCTIONS.md/AGENTS.md per user): a second aspect of this project is that the user/team will use the code for learning/teaching. Write readable code, explain the why, write ADRs.
 - Doc style (user, 2026-10-22): docs/* and code comments concise, dev-to-dev; AI-side detail in .agent/memory/refs/ linked by [area.n] tags (see refs/INDEX.md). NOT for INSTRUCTIONS.md/AGENTS.md (leave as is). ADRs keep full detail.
+
+- 2026-11-12: Scope = goal 1 (PoC on ~100 PDFs in data/criminal_and_civil, 93 files); goal 2 (production, 10k+) later. See refs pr.1, pl.2, docs/07, scripts/pipeline.sh.

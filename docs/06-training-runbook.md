@@ -40,6 +40,38 @@ Scaled linearly from the 15-decision sample, at unverified OpenAI prices and an 
 
 Data building (about $500) costs more than a training epoch (about $30 to $50): spend care on extraction and target quality before spending on GPU hours. The provider batch API (about half price) would roughly halve the two data items.
 
+## Budget estimate for a proof of concept (about 100 decisions) [pr.1]
+
+Goal 1 (PoC and learning) needs no more than this. Same method as above: linear scaling from the 15-decision sample, unverified prices, assumed throughput.
+
+| Item | Basis | Estimate |
+|------|-------|----------|
+| Extraction | 100 x about $0.014, doubled for prompt tweaks | $1.5 to 3 |
+| Training targets | about 390 examples x $0.009 | about $3.5 |
+| Baseline answers (evaluation) | about 40 eval examples, one call each | under $1 |
+| GPU | about 2M tokens per epoch (6M for 3), 1 to 2 h training, plus pilot, setup, 1 to 2 h serving | $5 to 20 |
+| **Total** | | **about $15 to 30** (API about $5 to 8) |
+
+- A 24 GB card (about $0.3 to 0.5 per hour, unverified) with a smaller base such as Qwen3-4B is the cheaper PoC option. The laptop GPU (3 GB) cannot train an 8B model.
+- What it shows: the pipeline works end to end; the model learns the JSON format, stage handling, citing only supplied context and hedging on weak evidence. What it does not show: domain accuracy (about 40 eval examples gives roughly +-15 points on outcome accuracy) or rich retrieval (random decisions rarely cite each other, so the graph is thin). Treat results as a demonstration.
+- Prefer a topical cluster spread over several years to a random sample: shared statutes, issues and citations give the graph and the time filter something to do.
+- Further savings: two stages per decision instead of four; the provider batch API (about half price); stop the machine right after each step.
+- Staging: 100 files first; about 1,000 files (about $150) only if the PoC looks promising; then the full corpus.
+- Cheaper middle option: skip the fine-tune and compare base model plus retrieval with the OpenAI baseline.
+
+### Measured on the PoC run (2026-11-12, 105 decisions)
+
+| Item | Estimate above | Measured |
+|------|----------------|----------|
+| Extraction (92 new decisions) | $1.5 to 3 | $1.24 (about $0.0135 per decision) |
+| Training targets | about $3.5 | $7.50 (estimate by the stage: $7.04) for 407 examples, about $0.018 each |
+| API total | $5 to 8 | about $8.75 |
+
+- Targets cost twice the per-example figure from the 15-decision sample: with more decisions to retrieve from, prompts grew from a mean of 5.1k to 7.4k tokens. Evidence is "strong" for 287 of 359 training examples (it was mostly "moderate" in the sample).
+- 416 examples planned, 407 built (9 targets missing: the generator output failed the checks), 359 train and 48 eval, split date 2026-10-07, 0 leakage violations.
+- Token statistics (Qwen3-8B tokenizer): max 8849, p90 8238. With `max_seq_length: 8192`, 48 of 359 training examples would be dropped. Before the GPU run, either raise `max_seq_length` (12288 needs more GPU memory) or retrieve fewer passages per example. Decide after a pilot.
+- GPU budget: 4.6M tokens per epoch counted by the trainer, so the GPU figures above still hold (about 6M tokens per epoch if nothing is dropped).
+
 ## Notes
 
 - Loss is computed on the advice only (prompt-completion format); examples longer than `max_seq_length` are dropped, never truncated.

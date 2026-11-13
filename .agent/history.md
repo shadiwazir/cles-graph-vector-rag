@@ -145,3 +145,18 @@
 - Done: user approved Phase 5. Research (GPU prices, base models, Unsloth/vLLM versions), token statistics of the dataset (mean 5.1k, max 6.9k), train group (trl, peft, datasets, accelerate, mlflow), configs, sft_config/sft_data/train_sft, leakage re-check, MLflow lineage, dry-run template preview, trusted_generator_hosts and llm_extra_body settings, vLLM serve profile, runbook, ADR 0016, docs 03-05, refs ml.5. CPU smoke test passed (58 min). Tests added (tests/test_sft.py).
 - Files affected: configs/sft/*, src/cles/training/{sft_config,sft_data,train_sft}.py, src/cles/{config,cli}.py, src/cles/inference/guard.py, src/cles/llm/openai_client.py, infra/docker-compose.yml, docs/*, tests/test_sft.py, pyproject.toml, uv.lock, .gitignore, .env.example.
 - Pending: user commit; decisions on base model and provider for the real run (after the real corpus is processed); Phase 5 sign-off; Phase 6.
+
+## 2026-11-12 PoC scope, playbook and pipeline script
+- Done: user added 93 PDFs in data/criminal_and_civil (2020-2026, criminal and civil), declared goal 1 (PoC on about 100 files) the short-term scope and asked to keep my cost/scope answer in memory and docs. Wrote refs pr.1 (goals, cost, caveats) and pl.2 (playbook design); docs/06 PoC budget section, docs/04 goals table, new docs/07-run-playbook.md (Mermaid flow, steps, paid gate, exit codes, scheduler hooks); README rewritten with every step; scripts/pipeline.sh (preflight, infra, data, dataset, train, train-dry, all, status, reset; paid gate with MAX_COST_USD and CONFIRM_PAID; logs under artifacts/pipeline/). Preflight passed (135 tests). Ingest of the 93 PDFs: 92 inserted, 1 unchanged, 0 failed. The 15 old samples remain in the DB (107 documents).
+- Files affected: scripts/pipeline.sh, README.md, docs/04, docs/06, docs/07, .agent/memory/refs/{pr.1,pl.2,INDEX}.md, .agent/history.md.
+- Decisions: PIPELINE_DATA_DIR (default data/criminal_and_civil) overrides DATA_DIR because .env still says data; script supplies unverified default prices (0.75/4.50) because .env had none and the dry-run estimate was null.
+- Next: embed, build_indexes, extract (paid, user-approved scope), graph_load, build_dataset, check_dataset, train-dry; user commit.
+
+## 2026-11-12 PoC rerun on the 93 new PDFs
+- Done: ran ingest, embed, build_indexes, extract (paid, $1.24, 92 ok), graph_load (107), record_manifest, build_dataset (paid, $7.50; 407 examples, 359 train, 48 eval, split 2026-10-07), check_dataset (0 violations), train-dry (48 of 359 over 8192 tokens). Dataset: artifacts/datasets/23afd5bb. Results noted in docs/06 and refs pr.1, durations in docs/07.
+- Decisions: treated the user's rerun request as approval of the estimated spend; ceilings 10 and 8 USD. Kept the 15 old samples in the DB. No GPU training (needs rented machine).
+- Next: user reviews; decide max_seq_length (raise vs fewer passages); DVC tracking of artifacts/datasets (and data/) not done; commit proposal; offer Phase 6 or GPU PoC.
+
+## 2026-11-12 DVC tracking of the PoC data
+- Done: added .dvcignore entry for *:Zone.Identifier, `dvc add data artifacts/datasets`, `dvc push` to the local remote (97 files). data.dvc and artifacts/datasets.dvc updated.
+- Next: user commit; explain open items (script coverage, GPU) and discuss the GPU choice.

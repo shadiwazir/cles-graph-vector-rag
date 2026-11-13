@@ -14,3 +14,4 @@ __pycache__/
 /artifacts/mlruns/
 /artifacts/mlflow.db
 /mlartifacts/
+/artifacts/pipeline/

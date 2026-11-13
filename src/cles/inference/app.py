@@ -2,9 +2,11 @@
 
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 
 import psycopg
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from cles.config import ConfigError, Settings, get_settings
@@ -12,6 +14,7 @@ from cles.db import connect
 from cles.domain.pack import load_pack
 from cles.graph.client import make_driver
 from cles.inference.advisor import AdviceRequest, Advisor
+from cles.inference.conversation import Turn, fold_history
 from cles.inference.guard import check_generator_allowed
 from cles.inference.verifier import CitationVerifier
 from cles.ingestion.embedder import Embedder
@@ -21,11 +24,21 @@ from cles.observability.telemetry import setup_telemetry, shutdown_telemetry
 from cles.retrieval.graph import GraphRetriever
 from cles.retrieval.hybrid import HybridRetriever
 
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+class TurnBody(BaseModel):
+    question: str = Field(max_length=2000)
+    advice: dict | None = None  # the advice the API returned for that question
+
 
 class AdviseBody(BaseModel):
     case_text: str = Field(min_length=20, max_length=20000)
     question: str = Field(min_length=5, max_length=2000)
     as_of: date | None = None  # only for evaluation: ignore decisions on or after this date
+    history: list[TurnBody] = Field(
+        default_factory=list, max_length=30
+    )  # earlier turns, oldest first
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -52,21 +65,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         verifier = CitationVerifier(conn, graph)
         return Advisor(conn, retriever, verifier, app.state.client, pack, settings)
 
+    @app.get("/", include_in_schema=False)
+    def page() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok", "pack": pack.info.name, "version": pack.info.version}
 
     @app.post("/advise")
     def advise(body: AdviseBody) -> dict:
+        case_text, dropped = fold_history(
+            body.case_text,
+            [Turn(t.question, t.advice) for t in body.history],
+            settings.conversation_history_tokens,
+        )
         try:
             with connect(
                 settings
             ) as conn:  # one connection per request (psycopg is not thread-safe)
                 response = build_advisor(conn).advise(
-                    AdviceRequest(body.case_text, body.question, body.as_of)
+                    AdviceRequest(case_text, body.question, body.as_of)
                 )
         except ConfigError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        response.extra["history"] = {"turns_sent": len(body.history), "turns_dropped": dropped}
         return response.__dict__
 
     return app

@@ -10,6 +10,8 @@
 #   dataset     build_dataset check_dataset                                       (build_dataset is PAID)
 #   train       train_sft   (needs a GPU; on a laptop use `train-dry`)
 #   train-dry   train_sft --dry-run: leakage re-check, token statistics, template preview
+#   eval        eval_generate with the OpenAI baseline (PAID), then eval_score
+#   eval-score  eval_score only: score every system in artifacts/eval/*/outputs.jsonl
 #   all         preflight infra data dataset train-dry
 #   status      row counts and the latest run summaries
 #   reset       DESTROY the Postgres and Neo4j volumes (needs CONFIRM_RESET=1)
@@ -123,6 +125,16 @@ step_dataset() {
   run_stages build_dataset check_dataset
 }
 
+# Baseline answers from the configured LLM on the held-out examples. The examples are public
+# decisions, so the external-generator guard is lifted for this step only.
+step_eval() {
+  EVAL_SYSTEM=openai paid_gate eval_generate
+  EVAL_SYSTEM=openai ALLOW_EXTERNAL_GENERATOR=true run_stages eval_generate
+  run_stages eval_score
+}
+
+step_eval_score() { run_stages eval_score; }
+
 step_train() { run_stages train_sft; }
 
 step_train_dry() {
@@ -152,9 +164,11 @@ case "$STEP" in
   dataset) step_dataset ;;
   train) step_train ;;
   train-dry) step_train_dry ;;
+  eval) step_eval ;;
+  eval-score) step_eval_score ;;
   all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
   status) step_status ;;
   reset) step_reset ;;
-  *) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 say "step $STEP done (logs: $LOG_DIR)"

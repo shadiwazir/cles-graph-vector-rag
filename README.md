@@ -44,6 +44,10 @@ ALLOW_EXTERNAL_GENERATOR=true uv run uvicorn cles.inference.app:create_app --fac
 
 `ALLOW_EXTERNAL_GENERATOR=true` is needed when the generator is a third-party service; use public or synthetic cases only. With a local model (for example Ollama at `http://localhost:11434/v1`) it is not needed.
 
+## Try it: conversation page
+
+With the API running (see above), open `http://localhost:8000/`. Type the case context once, then ask questions; each question is sent with all earlier questions and answers (the oldest are trimmed to a token budget, `CONVERSATION_HISTORY_TOKENS`). Nothing is stored in the browser or on the server. For a fine-tuned model on a GPU machine, point `LLM_BASE_URL` at it through an SSH tunnel (`docs/06-training-runbook.md`). Design: `docs/adr/0018-conversation-support.md`.
+
 ## Optional profiles
 
 - Observability (Phoenix, Prometheus, Grafana): `docker compose --env-file .env -f infra/docker-compose.yml --profile observability up -d`.

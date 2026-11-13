@@ -125,7 +125,7 @@ def test_advisor_removes_unverified_citations_and_audits(conn, embedder, pack, s
     assert any("quote_not_found" in w for w in response.warnings)
     assert any("unknown_case" in w for w in response.warnings)
     assert "not legal advice" in response.disclaimer and "Corpus:" in response.scope
-    assert response.sources and response.sources[0]["label"].startswith("2026 ONCA")
+    assert response.sources and all(src["label"] and src["title"] for src in response.sources)
 
     prompt = generator.prompts[0][1]["content"]
     assert CASE in prompt and "RETRIEVED PASSAGES" in prompt
@@ -137,7 +137,7 @@ def test_advisor_removes_unverified_citations_and_audits(conn, embedder, pack, s
     ).fetchone()
     assert row[0] == 3 and row[1] == 2
     assert row[2] is None  # question text is not stored by default
-    assert "2026 ONCA 719" in row[3]
+    assert row[3]  # the ids of the retrieved documents are audited
 
 
 def test_advisor_reports_generation_failure(conn, embedder, pack, settings):

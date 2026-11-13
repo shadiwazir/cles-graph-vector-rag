@@ -16,3 +16,4 @@ __pycache__/
 /mlartifacts/
 /artifacts/pipeline/
 /artifacts/mlflow-gpu.db
+/artifacts/*.log

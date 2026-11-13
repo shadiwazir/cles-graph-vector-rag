@@ -16,8 +16,10 @@ from cles.llm.base import LLMResponse  # noqa: E402
 
 class Generator:
     model = "fake"
+    prompts: list = []
 
     def complete_json(self, messages):
+        self.prompts.append(messages[1]["content"])
         advice = {
             "stage": "facts",
             "case_position": "p",
@@ -61,6 +63,27 @@ def test_advise_returns_structured_response(client):
     assert data["advice"]["evidence_strength"] in {"weak", "moderate", "strong"}
     assert data["disclaimer"] and data["scope"] and data["request_id"]
     assert data["sources"]
+
+
+def test_page_is_served(client):
+    page = client.get("/")
+    assert page.status_code == 200 and "CLES advisor" in page.text
+
+
+def test_history_is_folded_into_the_prompt(client):
+    Generator.prompts.clear()
+    body = {
+        "case_text": "The accused pleaded guilty to child luring; the Crown appeals the sentence.",
+        "question": "And what if the sentence is increased?",
+        "history": [
+            {"question": "What are the prospects on appeal?", "advice": {"stage": "facts"}}
+        ],
+    }
+    data = client.post("/advise", json=body).json()
+    prompt = Generator.prompts[-1]
+    assert "EARLIER IN THIS CONVERSATION" in prompt and "What are the prospects" in prompt
+    assert prompt.index("What are the prospects") < prompt.index("QUESTION:")
+    assert data["extra"]["history"] == {"turns_sent": 1, "turns_dropped": 0}
 
 
 def test_validation_rejects_short_input(client):

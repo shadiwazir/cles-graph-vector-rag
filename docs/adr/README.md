@@ -21,3 +21,5 @@ decision gets a new ADR that supersedes the old one.
 | 0014 | Training targets: hindsight-conditioned, evidence-capped, context-only citations |
 | 0015 | Stage-aware advice: procedural paths first, appeal result downstream |
 | 0016 | Fine-tuning run design: model, sequence length, tracking and data transfer |
+| 0017 | Model evaluation design: same prompts, real outcomes, single attempt |
+| 0018 | Conversation support: earlier turns folded into the case text |

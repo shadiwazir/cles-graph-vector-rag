@@ -1,0 +1,13 @@
+# Systems compared by `eval_generate` / `eval_score` on the held-out examples of the newest
+# dataset. All get the exact prompts stored in the dataset (retrieval context included).
+# Pick one with EVAL_SYSTEM=<name>.
+systems:
+  openai:        # the configured LLM (LLM_MODEL); paid, sends public case text to a third party
+    backend: openai
+  base:          # Qwen3-8B without the adapter (needs a GPU)
+    backend: hf
+    base_model: Qwen/Qwen3-8B
+  finetuned:     # Qwen3-8B plus the trained adapter (needs a GPU)
+    backend: hf
+    base_model: Qwen/Qwen3-8B
+    adapter: artifacts/runs/3a752888/adapter

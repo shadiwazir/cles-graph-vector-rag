@@ -170,3 +170,21 @@
 ## 2026-11-13 PoC fine-tune completed
 - Done: full QLoRA run on the L40S pod (46 steps, 36 min, train loss 0.936 mean, eval loss 0.961), adapter copied to artifacts/runs/3a752888, MLflow db copied to artifacts/mlflow-gpu.db. Results in refs ml.6 and docs/06. Pod left running at the user's request.
 - Next: user stops the pod (or keeps it for serving); serving and evaluation are Phase 6 and need user confirmation; commit.
+
+## 2026-11-13 End of session
+- Done: user will stop the pod today and continue tomorrow. Asked how long Phase 6 takes: answered about half a day for the evaluation-only scope (48 held-out examples; fine-tuned vs base+retrieval vs OpenAI baseline; about $2.5 extra), about a day with a vLLM serving test and a lawyer review sheet; dashboards, alerts, drift checks and judge calibration are goal 2.
+- Next: user commit (staged); confirm Phase 6 scope; restart the pod or attach a new pod to the volume (venv, model cache and repo are on /workspace; the L40S may be unavailable on restart, any 24 GB or larger GPU in EU-NL-1 works).
+
+## 2026-11-14 Tag and Phase 6 evaluation build
+- Done: tag v0.5.0-poc-finetune (annotated) on a503d70, approved by the user. Built Phase 6 evaluation only (stages eval_generate, eval_score, systems.yaml, ADR 0017, docs 05/07, tests); OpenAI baseline generated ($0.46) and scored. 4 old integration tests fail because they assume the 15-sample corpus (107 documents loaded now). Pod migrating to another machine (same volume).
+- Next: new SSH line from the user; push code; run base and finetuned generation on the pod; score all three; user stops the pod; fix the 4 tests; commit proposal.
+
+## 2026-11-14 Conversation support and page (step 2 of the live-test plan)
+- Done: user approved option A. Added conversation.py, history in POST /advise, static page at /, setting conversation_history_tokens, ADR 0018, refs rt.4, README section, 150 tests pass, ruff clean. Smoke test with OpenAI on a public sample scenario (about $0.1): works; second turn had all citations removed by the verifier (noted).
+- Files affected: src/cles/inference/{conversation.py,app.py,static/index.html}, src/cles/config.py, tests/{test_conversation.py,test_api.py,test_retrieval_integration.py,test_advisor.py}, docs/adr/{0018,README}, README.md, refs.
+- Next: pod (user migrating): push code, run base and finetuned evaluation, score; then vLLM serving and the live test; commit proposal covering evaluation plus conversation page.
+
+## 2026-11-14 Evaluation run on the pod
+- Done: pod restarted by the user (same host, new port); pushed code; generated base and fine-tuned answers on 48 held-out examples (batch 12), copied back, scored all three systems with OpenAI. Results in docs/05 and refs ml.7. Pod left running at the user's request to stop it.
+- Findings: fine-tune wins on schema, stage and citation grounding; no gain on outcome prediction; overconfident (9 wrong "high" top routes).
+- Next: user stops the pod; commit proposal (evaluation + conversation page + tests); decide next (second-round experiments, live serving test).

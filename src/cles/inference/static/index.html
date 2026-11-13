@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLES advisor</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6679; --line: #d9dde5;
+    --accent: #2457c5; --ok: #1d7a46; --warn: #a15c00; --bad: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171d; --card: #1c2029; --text: #e6e9ef; --muted: #9aa3b5; --line: #323847;
+      --accent: #7aa2ff; --ok: #5ccf8c; --warn: #f0b255; --bad: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .banner { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+             background: var(--card); color: var(--text); font: inherit; resize: vertical; }
+  button { padding: 8px 14px; border: 1px solid var(--accent); border-radius: 6px;
+           background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .spacer { flex: 1; }
+  #log { margin: 16px 0; display: flex; flex-direction: column; gap: 12px; }
+  .q { align-self: flex-end; max-width: 85%; background: var(--accent); color: #fff;
+       padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+  .a { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+       padding: 12px 14px; }
+  .a h3 { font-size: 14px; margin: 12px 0 4px; }
+  .a p { margin: 4px 0; white-space: pre-wrap; }
+  .route { border-top: 1px solid var(--line); padding: 8px 0; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 12px;
+         border: 1px solid var(--line); margin-left: 4px; color: var(--muted); }
+  .tag.ok { color: var(--ok); border-color: var(--ok); }
+  .tag.warn { color: var(--warn); border-color: var(--warn); }
+  .tag.bad { color: var(--bad); border-color: var(--bad); }
+  .quote { color: var(--muted); border-left: 3px solid var(--line); margin: 4px 0;
+           padding-left: 8px; font-size: 13px; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .err { color: var(--bad); }
+  ul { margin: 4px 0; padding-left: 20px; }
+  details { margin-top: 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CLES advisor</h1>
+  <div class="banner" id="banner">Decision support for a qualified lawyer, not legal advice.</div>
+
+  <label for="ctx">Case context (what the lawyer knows so far)</label>
+  <textarea id="ctx" rows="6" placeholder="Describe the case and where it stands."></textarea>
+
+  <div id="log" aria-live="polite"></div>
+
+  <label for="q">Question</label>
+  <textarea id="q" rows="3" placeholder="Ask a question. Ctrl+Enter sends."></textarea>
+  <div class="row">
+    <button id="send">Send</button>
+    <button id="reset" class="secondary">New conversation</button>
+    <span class="spacer"></span>
+    <span id="status" class="meta"></span>
+  </div>
+</main>
+<script>
+"use strict";
+// The conversation lives only in this page (nothing is stored in the browser or the server).
+// Every request sends the context, the new question and all earlier turns (question + advice).
+const history = [];
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v; else node.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+const tag = (text, kind) => el("span", { class: "tag " + (kind || "") }, text);
+const section = (title, ...body) => [el("h3", {}, title), ...body];
+const list = (items) => el("ul", {}, ...items.map((t) => el("li", {}, t)));
+
+function renderRoute(r) {
+  const kind = { high: "ok", medium: "warn", low: "bad" }[r.likelihood] || "";
+  const head = el("div", {}, el("strong", {}, r.name || "(route)"), tag("likelihood: " + r.likelihood, kind));
+  if (r.expected_outcome) head.append(tag(r.expected_outcome));
+  for (const rem of r.expected_remedies || []) head.append(tag(rem));
+  const node = el("div", { class: "route" }, head);
+  if (r.description) node.append(el("p", {}, r.description));
+  if (r.next_event) node.append(el("p", {}, el("em", {}, "Next: "), r.next_event));
+  if (r.reasoning) node.append(el("p", {}, el("em", {}, "Why: "), r.reasoning));
+  for (const a of r.authorities || []) {
+    const cite = el("div", {}, el("strong", {}, `${a.case_id} para ${a.para}`),
+      a.verified ? tag("verified", "ok") : tag("not verified", "bad"));
+    if ((a.overruled_by || []).length) cite.append(tag("overruled by " + a.overruled_by.join(", "), "bad"));
+    node.append(cite, el("div", { class: "quote" }, a.quote));
+  }
+  return node;
+}
+
+function renderAnswer(data) {
+  const card = el("div", { class: "a" });
+  if (data.error) card.append(el("p", { class: "err" }, "The model did not produce valid advice: " + data.error));
+  const advice = data.advice;
+  const strength = data.evidence_strength;
+  card.append(el("div", {}, tag("evidence: " + strength, { strong: "ok", moderate: "warn", weak: "bad" }[strength])));
+  if (advice) {
+    if (advice.stage) card.append(el("div", {}, tag("stage: " + advice.stage)));
+    if (advice.case_position) card.append(...section("Where the case stands", el("p", {}, advice.case_position)));
+    card.append(...section("Routes", ...(advice.routes || []).map(renderRoute)));
+    if ((advice.risks || []).length) card.append(...section("Risks", list(advice.risks)));
+    if ((advice.recommended_next_steps || []).length) card.append(...section("Recommended next steps", list(advice.recommended_next_steps)));
+    if ((advice.missing_information || []).length) card.append(...section("Missing information", list(advice.missing_information)));
+  }
+  if ((data.warnings || []).length) card.append(...section("Warnings", list(data.warnings)));
+  if ((data.sources || []).length) {
+    card.append(el("details", {}, el("summary", {}, `Sources retrieved (${data.sources.length})`),
+      list(data.sources.map((s) => `${s.label} - ${s.title}`))));
+  }
+  const h = (data.extra || {}).history || {};
+  card.append(el("div", { class: "meta" },
+    `${data.latency_ms} ms; citations verified ${data.citations_total - data.citations_failed}/${data.citations_total}; ` +
+    `earlier turns sent ${h.turns_sent || 0}, dropped ${h.turns_dropped || 0}; prompt ${data.prompt_version}`));
+  card.append(el("div", { class: "meta" }, data.scope + " " + data.disclaimer));
+  return card;
+}
+
+async function send() {
+  const question = $("q").value.trim();
+  const caseText = $("ctx").value.trim();
+  if (question.length < 5 || caseText.length < 20) {
+    $("status").textContent = "Add a case context (20+ characters) and a question (5+).";
+    return;
+  }
+  $("send").disabled = true;
+  $("status").textContent = "Thinking...";
+  $("log").append(el("div", { class: "q" }, question));
+  try {
+    const res = await fetch("/advise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ case_text: caseText, question, history }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    const data = await res.json();
+    $("log").append(renderAnswer(data));
+    history.push({ question, advice: data.advice });
+    $("q").value = "";
+    $("status").textContent = "";
+  } catch (err) {
+    $("log").append(el("div", { class: "a err" }, "Request failed: " + err.message));
+    $("status").textContent = "";
+  } finally {
+    $("send").disabled = false;
+    $("log").lastElementChild.scrollIntoView({ block: "nearest" });
+  }
+}
+
+$("send").addEventListener("click", send);
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); });
+$("reset").addEventListener("click", () => { history.length = 0; $("log").replaceChildren(); $("status").textContent = ""; });
+</script>
+</body>
+</html>

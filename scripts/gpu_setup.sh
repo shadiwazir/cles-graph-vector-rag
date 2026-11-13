@@ -4,6 +4,8 @@
 #   scripts/gpu_setup.sh push  user@host port    run on the LAPTOP: rsync repo + newest dataset
 #   scripts/gpu_setup.sh setup                    run on the GPU MACHINE: environment + dry run
 #   scripts/gpu_setup.sh run <name> <config>      run on the GPU MACHINE: train_sft in the background
+#   scripts/gpu_setup.sh eval <system>            run on the GPU MACHINE: eval_generate with one
+#                                                 system of eval/systems.yaml (run name eval-<system>)
 #   scripts/gpu_setup.sh wait <name>              run on the GPU MACHINE: block until the run ends
 #
 # `run` writes /workspace/runs/<name>.log and, when the process ends, /workspace/runs/<name>.exit
@@ -70,13 +72,23 @@ ENV
       echo \$? > /workspace/runs/$NAME.exit" < /dev/null > /dev/null 2>&1 &
     echo "started $NAME (log /workspace/runs/$NAME.log, done marker /workspace/runs/$NAME.exit)"
     ;;
+  eval)
+    SYSTEM="${2:?usage: gpu_setup.sh eval <system>}"
+    mkdir -p /workspace/runs
+    rm -f "/workspace/runs/eval-$SYSTEM.exit"
+    cd "$REMOTE_DIR"
+    setsid nohup bash -c ". /workspace/env.sh && . /workspace/venv/bin/activate \\
+      && EVAL_SYSTEM='$SYSTEM' cles run eval_generate > /workspace/runs/eval-$SYSTEM.log 2>&1; \\
+      echo \\$? > /workspace/runs/eval-$SYSTEM.exit" < /dev/null > /dev/null 2>&1 &
+    echo "started eval-$SYSTEM (log /workspace/runs/eval-$SYSTEM.log, marker eval-$SYSTEM.exit)"
+    ;;
   wait)
     NAME="${2:?usage: gpu_setup.sh wait <name>}"
     until [[ -f "/workspace/runs/$NAME.exit" ]]; do sleep 10; done
     echo "run $NAME exit code: $(cat "/workspace/runs/$NAME.exit")"
     ;;
   *)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac

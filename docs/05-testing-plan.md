@@ -59,6 +59,33 @@ Run: `uv run pytest`, `uv run ruff check .`.
 - CPU smoke run: finishes, saves an adapter, logs params, lineage tags, loss metrics and artifacts to MLflow.
 - On the GPU machine (not testable here): Unsloth run completes; a 100-step pilot gives tokens per second; vLLM serves the adapter as `cles`; the API answers through it.
 
+## Model evaluation (Phase 6, evaluation only) [ml.7] (ADR 0017)
+
+- Unit tests (`tests/test_eval_models.py`): answer parsing (think blocks, code fences, bad JSON, schema errors); outcome and remedy scoring; early-stage handling; citations outside the context; likelihood cap violations; aggregation per stage with the majority baseline.
+- Run: `eval_generate` once per system (`EVAL_SYSTEM=openai|base|finetuned`), then `eval_score` writes `artifacts/eval/report.md` and `report.json`.
+- Reading the result: 12 examples per stage; differences under about 15 points are noise. Compare with the majority-class reference, not with 100 percent.
+
+### Result of the PoC evaluation (2026-11-14)
+
+48 held-out examples (12 per stage, 12 decisions), adapter `3a752888`, same prompts for all systems. Full tables per stage: `artifacts/eval/report.md` (local, not versioned).
+
+| Metric | base Qwen3-8B | fine-tuned | OpenAI gpt-5.4-mini |
+|--------|---------------|------------|---------------------|
+| matches the advice schema | 90% | **100%** | 90% |
+| stage identified correctly | 75% | **100%** | 77% |
+| top route = real outcome (24 late-stage examples) | **62%** | 46% | 50% |
+| any route names the real outcome (48) | 56% | **58%** | 46% |
+| citations failing verification | 79 | **8** | 19 |
+| citations outside the supplied context | 7 | **0** | 0 |
+| wrong top routes rated "high" | 0 | **9** | 1 |
+
+Reference: always predicting "dismissed" is right for 42% (10 of 24).
+
+- The fine-tune learned the behaviour it was trained for: schema, stage, and citing only verifiable passages from the context (8 failed citations against 79 for the base model).
+- It did not learn to predict the outcome better. With 24 late-stage examples the error is about +-20 points, so the three systems are statistically indistinguishable on outcome; the fine-tune is not better than the base model plus retrieval.
+- It is overconfident: 9 wrong top routes rated "high". Cause (likely): in the training targets the first route always equals the real outcome, so the model learns to lead with a confident route it cannot know. Production caps (`cap_likelihood`) clamp by evidence and stage, but not all of these.
+- Not measured: whether the advice is useful to a lawyer (needs lawyer review), and any effect of the 12-decision evaluation set being from one narrow time window.
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

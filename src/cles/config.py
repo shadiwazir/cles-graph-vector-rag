@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     evidence_weak_distance: float = 0.45
 
     sft_config: Path = Path("configs/sft/qwen3_8b_qlora.yaml")
+    conversation_history_tokens: int = 1500  # budget for earlier turns folded into the case text
+    # Model evaluation (stages eval_generate and eval_score)
+    eval_system: str = "openai"  # which entry of eval_systems_file to generate with
+    eval_systems_file: Path = Path("eval/systems.yaml")
+    eval_out_dir: Path = Path("artifacts/eval")
+    eval_max_new_tokens: int = 2000
+    eval_batch_size: int = 4
     # Hosts we control that may receive case text besides localhost (for example a rented GPU
     # running the fine-tuned model). Comma-separated in the environment.
     trusted_generator_hosts: list[str] = Field(default_factory=list)

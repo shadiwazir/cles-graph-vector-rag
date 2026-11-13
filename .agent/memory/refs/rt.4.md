@@ -1,0 +1,7 @@
+# rt.4 Live conversational interface (ADR 0018)
+
+- User (2026-11-14): after the evaluation, test the deployed model live, not from recorded answers; a live interface is the ultimate goal; simple page, send questions and context, conversation style where all previous Q/A go with the last question. Approved option A (fold history into the case text), a static page served by FastAPI, an SSH tunnel to the pod.
+- Built: cles/inference/conversation.py, `history` in POST /advise, page at `/` (static/index.html), settings conversation_history_tokens (1500). Tests: tests/test_conversation.py (6), two new API tests; 150 tests pass.
+- Smoke test with OpenAI (public sample scenario, two turns, API on localhost:8000): turn 1 ok (5 citations, 1 failed), turn 2 carried the history (turns_sent 1) but all 6 citations failed verification and were removed: the verifier does its job, but the second turn shows that follow-ups can cite things not found in the corpus; watch for this in the live test. Latency 9.5 s and 15 s with gpt-5.4-mini.
+- Not done yet: vLLM serving of the fine-tuned model on the pod (own venv, 16-bit base about 16 GB more on the volume, LLM_EXTRA_BODY enable_thinking false, spot-check against the 4-bit eval outputs), SSH tunnel steps in the runbook, an opt-in comparison with a third-party model.
+- User also said: the improvement round (retrieval diversity cap) is a second round and runs as separate MLflow experiments (ml.7).

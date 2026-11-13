@@ -32,6 +32,8 @@ The steps up to `train-dry` run on the laptop. `train` needs a GPU machine and i
 | `dataset` | `build_dataset check_dataset` | `build_dataset` | gate before the build |
 | `train-dry` | `train_sft --dry-run` | no | leakage re-check, token statistics, template preview |
 | `train` | `train_sft` | no (GPU time) | run on the GPU machine |
+| `eval` | `eval_generate` (OpenAI baseline), `eval_score` | yes | gate before generation; public decisions only |
+| `eval-score` | `eval_score` | no | scores every system found in `artifacts/eval/*/outputs.jsonl` |
 | `all` | `preflight infra data dataset train-dry` | yes | |
 | `status` | row counts, latest runs, datasets | no | |
 | `reset` | drops Postgres and Neo4j volumes | no | `CONFIRM_RESET=1`; also deletes the paid caches |
@@ -75,6 +77,12 @@ Each run writes `artifacts/pipeline/<timestamp>/`: `<stage>.log` (stdout), `<sta
 2. `scripts/pipeline.sh data`. Ingest skips files it has seen (by hash); extraction skips decisions it has extracted with the same schema version and model.
 3. `scripts/pipeline.sh dataset` writes a new dataset folder; the split date moves with the data.
 4. For a clean start (different corpus, no old documents): `CONFIRM_RESET=1 scripts/pipeline.sh reset`, then `infra` and the rest.
+
+## Model evaluation
+
+1. `CONFIRM_PAID=1 scripts/pipeline.sh eval`: the OpenAI baseline on the held-out examples (about $0.5 to 1), then the score.
+2. On the GPU machine, for each local system: `scripts/gpu_setup.sh eval base` and `scripts/gpu_setup.sh eval finetuned`, each followed by `scripts/gpu_setup.sh wait eval-<system>` (about 10 to 20 minutes each). Copy `artifacts/eval/<system>/outputs.jsonl` back.
+3. `scripts/pipeline.sh eval-score` rebuilds `artifacts/eval/report.md`. Systems are defined in `eval/systems.yaml`.
 
 ## Duration notes (laptop, 105 decisions)
 

@@ -160,3 +160,13 @@
 ## 2026-11-12 DVC tracking of the PoC data
 - Done: added .dvcignore entry for *:Zone.Identifier, `dvc add data artifacts/datasets`, `dvc push` to the local remote (97 files). data.dvc and artifacts/datasets.dvc updated.
 - Next: user commit; explain open items (script coverage, GPU) and discuss the GPU choice.
+
+## 2026-11-13 RunPod pod, scripts and pilot
+- Done: user created an L40S pod on RunPod (manual option). Wrote configs/sft/qwen3_8b_poc.yaml and scripts/gpu_setup.sh (push, setup, run, wait), pushed repo and dataset 23afd5bb, set up the venv, fixed the unsloth install, ran a 3-step pilot (ok, about 2.5k tokens/s). Fixed my wait bugs and the model cache location. Refs ml.6, docs/06.
+- Files affected: scripts/gpu_setup.sh, configs/sft/qwen3_8b_poc.yaml, docs/06, .agent/memory/refs/{ml.6,INDEX}.md, .agent/history.md, (pod) /workspace/*.
+- Decisions: 3-step pilot instead of 100; full run about 45 steps. Wait on marker files.
+- Next: user go-ahead for the full run (about 35 min, about $0.65); then copy the adapter back, stop the pod, serve and evaluate.
+
+## 2026-11-13 PoC fine-tune completed
+- Done: full QLoRA run on the L40S pod (46 steps, 36 min, train loss 0.936 mean, eval loss 0.961), adapter copied to artifacts/runs/3a752888, MLflow db copied to artifacts/mlflow-gpu.db. Results in refs ml.6 and docs/06. Pod left running at the user's request.
+- Next: user stops the pod (or keeps it for serving); serving and evaluation are Phase 6 and need user confirmation; commit.

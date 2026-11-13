@@ -35,6 +35,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [ml.5] | Phase 5 fine-tuning build notes | ADR 0016, docs/06 |
 | [ml.1] | Fine-tuning stack | ADR 0003 |
 | [ml.2] | Stage cuts and leakage | ADR 0008 |
+| [ml.6] | GPU rental for the PoC (RunPod) | docs/06 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |
 | [pl.2] | Run playbook and pipeline script | docs/07 |
 | [pr.1] | Two goals; PoC on about 100 decisions | docs/06, docs/04 |

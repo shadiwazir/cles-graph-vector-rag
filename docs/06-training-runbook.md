@@ -25,6 +25,18 @@ Fine-tuning runs on a rented GPU machine, not on the development laptop (GTX 105
 10. **Plug into the API.** `LLM_BASE_URL=http://<host>:8000/v1`, `LLM_MODEL=cles`, `OPENAI_API_KEY=anything`, and list the host in `TRUSTED_GENERATOR_HOSTS` (it is a machine you control, so case text may go there).
 11. **Evaluate.** Compare against the baselines (base model with retrieval, the OpenAI model) on the evaluation split, per stage (Phase 6).
 
+## RunPod session for the PoC [ml.6]
+
+Pod: one L40S 48 GB on demand (about $1.09 per hour), template PyTorch 2.8.0 / CUDA 12.8.1, volume 60 GB on `/workspace`, SSH over direct TCP (the proxy SSH cannot copy files). Prices seen on 2026-11-13.
+
+1. Laptop: `scripts/gpu_setup.sh push root@<ip> <port>` copies the repo and the newest dataset to `/workspace/cles` (no `.env`, no `.git`).
+2. Pod: `cd /workspace/cles && scripts/gpu_setup.sh setup` creates `/workspace/venv`, installs the project, the train group and Unsloth, writes a minimal `.env` and runs the dry run. It uses `configs/sft/qwen3_8b_poc.yaml` (sequence length 12288, batch 1 x 16, eval every 10 steps).
+3. Pilot: a 3-step run (the full run is only about 45 steps on 359 examples, so the 100-step pilot of step 6 does not apply). Start with `scripts/gpu_setup.sh run pilot configs/sft/pilot.yaml` and wait with `scripts/gpu_setup.sh wait pilot` (it blocks on `/workspace/runs/pilot.exit`; do not wait with `pgrep -f` over ssh, it matches itself). Measured 2026-11-13: 44 to 52 s per step of 16 sequences, about 2.5k tokens per second, no out-of-memory at 12288 tokens.
+4. Full run: `scripts/gpu_setup.sh run full configs/sft/qwen3_8b_poc.yaml`, about 45 steps, about 35 minutes (about $0.65).
+   Result of the PoC full run (2026-11-13): 46 steps in about 36 minutes, train loss 1.33 to 0.82, eval loss 1.07 to 0.96 (eval flattens while train keeps falling: mild overfitting, expected with 359 examples), about 10.7 GB GPU memory (a 24 GB card would also work at this length). Adapter: `artifacts/runs/<id>/adapter` (678 MB). Details in the MLflow run.
+5. Every ssh command must source `/workspace/env.sh` (non-interactive ssh does not read `.bashrc`); otherwise the model downloads to the container disk, which is erased on stop. `gpu_setup.sh run` does this.
+6. Stop the pod after each step; delete the volume when the PoC is finished (it bills about $4.20 per month even when the pod is stopped).
+
 ## Budget estimate for the real corpus (10,000 decisions)
 
 Scaled linearly from the 15-decision sample, at unverified OpenAI prices and an assumed GPU throughput. All figures are rough; the pilot step replaces the throughput assumption.

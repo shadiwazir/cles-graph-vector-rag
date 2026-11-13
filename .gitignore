@@ -15,3 +15,4 @@ __pycache__/
 /artifacts/mlflow.db
 /mlartifacts/
 /artifacts/pipeline/
+/artifacts/mlflow-gpu.db

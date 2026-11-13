@@ -136,7 +136,7 @@ step_status() {
     "select 'documents' t, count(*) from documents union all select 'chunks', count(*) from chunks
      union all select 'extractions', count(*) from extractions union all select 'training_targets', count(*) from training_targets"
   "${COMPOSE[@]}" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-    "select stage, status, started_at from ingestion_runs order by started_at desc limit 8" || true
+    "select stage, started_at, finished_at from ingestion_runs order by started_at desc limit 8" || true
   ls -1d artifacts/datasets/*/ 2>/dev/null | tail -3 || true
 }
 

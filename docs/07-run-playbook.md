@@ -39,6 +39,7 @@ The steps up to `train-dry` run on the laptop. `train` needs a GPU machine and i
 | `snapshot` | `dvc add` + `dvc push` | no | exports, datasets, eval outputs, adapters; runs automatically after the data steps |
 | `alerts-test` | `promtool test rules` | no | unit tests of the Prometheus alert rules |
 | `mlflow-import` | `cles.mlflow_import` | no | `--source sqlite:///file.db`: copy a GPU machine's runs into the server and register adapters |
+| `console` | web console on port 8000 | no | home page, explorer, platform tools, about; needs `infra` for the tool links |
 | `explore` | results explorer web page | no | reads `artifacts/eval/` only; port `EXPLORER_PORT` (8001) |
 | `all` | `preflight infra data dataset train-dry` | yes | |
 | `status` | row counts, latest runs, datasets | no | |
@@ -99,6 +100,7 @@ Each run writes `artifacts/pipeline/<timestamp>/`: `<stage>.log` (stdout), `<sta
 | Grafana | http://localhost:3000 | `CLES model quality and pipeline` (scores per system, progress per evaluation, cost), `CLES overview` (runtime) |
 | Phoenix | http://127.0.0.1:6006 | traces of stages and requests (internal use only, ADR 0007) |
 | Prometheus | http://localhost:9090/alerts | alert rules and their state |
+| Console | http://localhost:8000 | one landing page with all of the below |
 | Explorer | http://localhost:8001 | answers of all systems side by side, your labels (blind mode), judge scores |
 | DVC | `dvc metrics diff <rev>` | evaluation scores between commits |
 

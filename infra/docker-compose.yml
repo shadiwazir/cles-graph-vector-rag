@@ -59,7 +59,7 @@ services:
     container_name: cles_mlflow
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,6 +69,7 @@ services:
       mlflow server --host 0.0.0.0 --port 5000
       --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-cles_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/mlflow
       --serve-artifacts --artifacts-destination /mlflow/artifacts
+      --x-frame-options NONE
 
   # Telemetry stack: docker compose --profile observability up -d
   otel-collector:
@@ -108,7 +109,7 @@ services:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     depends_on:
       - otel-collector
 
@@ -118,8 +119,13 @@ services:
     container_name: cles_grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
+      # The CLES console embeds Grafana: allow framing and read-only anonymous viewing. This is a
+      # local PoC: the port is bound to this machine only; editing still needs the admin login.
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro

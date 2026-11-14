@@ -200,3 +200,7 @@
 - Not done (needs the user or a GPU): lawyer labels and judge calibration, acceptance thresholds, fine-tuned-without-retrieval baseline (GPU), alert receiver, DagsHub/cloud DVC decision, retrieval benchmark for the 93 new decisions, GPU/DB exporters.
 - Next: user commit; user explores results and labels answers (blind mode); decisions on second-round experiments.
 
+## 2026-11-14 Web console
+- Done: built the web console (ADR 0020, refs pr.2): one app and port with the product home page (ask), results explorer, platform tools with live health, about; compose changes to allow embedding; pipeline `console`; tests. User said they are not a lawyer (labels cannot be legal opinions), DagsHub not needed (local DVC), acceptance thresholds to be discussed later, next GPU run decided after the console.
+- Files affected: src/cles/console/*, src/cles/inference/app.py, src/cles/evaluation/explorer.py, src/cles/config.py, infra/docker-compose.yml, scripts/pipeline.sh, tests/test_console.py, docs/adr/0020, README.md, docs/07, refs.
+- Next: user commit (two staged batches), reviews the console, decides on the GPU run (serve the fine-tuned model with vLLM behind an SSH tunnel so the Ask page uses it), thresholds discussion.

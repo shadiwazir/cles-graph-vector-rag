@@ -24,3 +24,4 @@ decision gets a new ADR that supersedes the old one.
 | 0017 | Model evaluation design: same prompts, real outcomes, single attempt |
 | 0018 | Conversation support: earlier turns folded into the case text |
 | 0019 | MLflow, DVC and observability are part of every run |
+| 0020 | One web console as the landing page of the system |

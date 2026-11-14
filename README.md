@@ -48,6 +48,14 @@ ALLOW_EXTERNAL_GENERATOR=true uv run uvicorn cles.inference.app:create_app --fac
 
 With the API running (see above), open `http://localhost:8000/`. Type the case context once, then ask questions; each question is sent with all earlier questions and answers (the oldest are trimmed to a token budget, `CONVERSATION_HISTORY_TOKENS`). Nothing is stored in the browser or on the server. For a fine-tuned model on a GPU machine, point `LLM_BASE_URL` at it through an SSH tunnel (`docs/06-training-runbook.md`). Design: `docs/adr/0018-conversation-support.md`.
 
+## Web console (landing page)
+
+```bash
+ALLOW_EXTERNAL_GENERATOR=true scripts/pipeline.sh console    # public or synthetic cases only while the model is a third-party service
+```
+
+Open `http://localhost:8000/`: **Ask** (the advisor, conversation style), **Results explorer**, **Platform** (MLflow, Grafana, Phoenix, Prometheus, API reference, with live health) and **About**. With a model you control (for example the fine-tuned model behind an SSH tunnel, set `LLM_BASE_URL`) the flag is not needed. Start the tools first with `scripts/pipeline.sh infra`. Design: `docs/adr/0020-web-console.md`.
+
 ## Explore the evaluation results
 
 After `eval_generate` (per system) and `eval_score`, compare the systems side by side:

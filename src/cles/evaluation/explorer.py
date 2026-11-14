@@ -115,9 +115,16 @@ class LabelBody(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="CLES results explorer")
+    add_explorer_routes(app, settings, page_route="/")
+    return app
+
+
+def add_explorer_routes(app: FastAPI, settings: Settings, page_route: str = "/") -> None:
+    """The explorer page at `page_route` and its API (/api/data, /api/label). The CLES console
+    adds these to its own app, at /explorer."""
     cache: dict = {}
 
-    @app.get("/", include_in_schema=False)
+    @app.get(page_route, include_in_schema=False)
     def page() -> FileResponse:
         return FileResponse(STATIC_DIR / "explorer.html")
 
@@ -150,5 +157,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             out.write(json.dumps(row) + "\n")
         cache.pop("data", None)  # reload so the saved label shows up
         return row
-
-    return app

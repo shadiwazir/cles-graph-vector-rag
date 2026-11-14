@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLES Advisor</title>
+<link rel="stylesheet" href="/assets/console.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#ask" aria-label="CLES Advisor home">
+    <span class="logo" aria-hidden="true">C</span>
+    <span class="brand-text"><b>CLES</b> Advisor<small>Cognitive Legal Expert System</small></span>
+  </a>
+  <nav id="tabs" aria-label="Main">
+    <a href="#ask" data-tab="ask">Ask</a>
+    <a href="#explorer" data-tab="explorer">Results explorer</a>
+    <a href="#platform" data-tab="platform">Platform</a>
+    <a href="#about" data-tab="about">About</a>
+  </nav>
+  <div class="model-badge" id="modelBadge" title="Model that writes the answers">
+    <i class="dot" id="modelDot"></i><span id="modelName">loading</span>
+  </div>
+</header>
+
+<main>
+  <!-- ASK -->
+  <section id="tab-ask" class="tab">
+    <div class="hero">
+      <h1>Strategy support for appeals and sentencing, grounded in case law</h1>
+      <p>Describe where your case stands and ask a question. You get the realistic routes with their likelihood, the risks, the next steps and authorities that are checked against the decisions themselves.</p>
+      <ul class="pills">
+        <li>Routes with likelihood</li>
+        <li>Verified citations</li>
+        <li>Stage-aware advice</li>
+        <li>Confidence limited by evidence</li>
+      </ul>
+    </div>
+
+    <div class="layout">
+      <div class="workspace">
+        <div class="card">
+          <label for="ctx" class="label">Your case</label>
+          <textarea id="ctx" rows="5" placeholder="Describe the case and where it stands: facts, proceedings so far, the decision under appeal, the grounds."></textarea>
+          <div class="examples">
+            <span class="muted">Try an example:</span>
+            <div id="examples"></div>
+          </div>
+        </div>
+
+        <div id="log" aria-live="polite">
+          <div id="empty" class="empty">
+            <ol>
+              <li><b>Describe the case</b><span>facts, stage, what was decided</span></li>
+              <li><b>Ask a question</b><span>prospects, routes, risks, next steps</span></li>
+              <li><b>Review the advice</b><span>every authority is verified</span></li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="card composer">
+          <label for="q" class="label">Your question</label>
+          <textarea id="q" rows="2" placeholder="For example: What are the realistic outcomes of an appeal, and what should we prepare first?"></textarea>
+          <div class="row">
+            <button id="send" class="primary">Ask the advisor</button>
+            <button id="reset" class="ghost">New conversation</button>
+            <span class="spacer"></span>
+            <span id="status" class="muted"></span>
+          </div>
+          <p class="muted tiny">Earlier questions and answers in this conversation are sent with each new question. Nothing is stored in your browser.</p>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="card" id="cardModel"><h3>Where answers come from</h3><div id="modelInfo" class="muted">loading</div></div>
+        <div class="card" id="cardCorpus"><h3>Knowledge base</h3><div id="corpusInfo" class="muted">loading</div></div>
+        <div class="card" id="cardQuality"><h3>Quality checks</h3><div id="qualityInfo" class="muted">loading</div></div>
+        <div class="card"><h3>Good to know</h3><p class="muted small" id="disclaimer"></p></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- EXPLORER -->
+  <section id="tab-explorer" class="tab frame-tab">
+    <iframe title="Results explorer" data-src="/explorer"></iframe>
+  </section>
+
+  <!-- PLATFORM -->
+  <section id="tab-platform" class="tab">
+    <div class="section-head">
+      <h2>Platform</h2>
+      <p class="muted">The tools behind the advisor. Open one here or in a new tab.</p>
+      <div id="health" class="health">checking</div>
+    </div>
+    <div id="toolGrid" class="grid"></div>
+    <div id="viewer" class="viewer" hidden>
+      <div class="viewer-bar"><b id="viewerTitle"></b><span class="spacer"></span><a id="viewerOpen" target="_blank" rel="noopener">Open in new tab</a><button id="viewerClose" class="ghost">Close</button></div>
+      <iframe id="viewerFrame" title="Tool"></iframe>
+    </div>
+    <h3 class="sub">Core services</h3>
+    <div id="coreList" class="core"></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="tab-about" class="tab">
+    <div class="section-head"><h2>About CLES Advisor</h2></div>
+    <div class="about">
+      <div class="card">
+        <h3>How an answer is made</h3>
+        <ol class="flow">
+          <li><b>Understand the stage</b><span>Where does the case stand: facts, proceedings, a decision, grounds of appeal?</span></li>
+          <li><b>Retrieve</b><span>Relevant passages from earlier decisions, found by meaning and by keywords, plus a graph of how cases cite and treat each other.</span></li>
+          <li><b>Reason</b><span>A fine-tuned language model proposes routes, likelihoods, risks and next steps, using only that material.</span></li>
+          <li><b>Verify</b><span>Every cited case, paragraph and quote is checked against the decision text. Citations that fail are removed.</span></li>
+        </ol>
+      </div>
+      <div class="card"><h3>Quality checks</h3><div id="aboutQuality" class="muted">loading</div></div>
+      <div class="card">
+        <h3>Limits you should know</h3>
+        <ul class="plain">
+          <li>It supports a qualified lawyer's judgement. It is not legal advice.</li>
+          <li>It knows only the decisions in its knowledge base, and the law may have changed since.</li>
+          <li>Likelihoods are capped by the strength of the evidence found; weak evidence is shown as such.</li>
+          <li>Outcome prediction is hard: in the latest evaluation it was not clearly better than a general model with retrieval. See the results explorer.</li>
+        </ul>
+      </div>
+      <div class="card"><h3>Privacy</h3><p class="muted" id="privacy"></p></div>
+    </div>
+  </section>
+</main>
+<script src="/assets/console.js"></script>
+</body>
+</html>

@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     # Tracking and telemetry
     mlflow_enabled: bool = True  # track every stage and evaluation (best effort, never blocks)
     mlflow_tracking_uri: str = "http://localhost:5000"
+    # Where the console links to and checks the platform tools
+    grafana_url: str = "http://localhost:3000"
+    phoenix_url: str = "http://127.0.0.1:6006"
+    prometheus_url: str = "http://localhost:9090"
     mlflow_registered_model: str | None = None  # register the adapter under this name when set
     telemetry_enabled: bool = False  # export traces and metrics to the OTLP endpoint
     otel_exporter_otlp_endpoint: str = "http://localhost:4318"  # OTLP over HTTP

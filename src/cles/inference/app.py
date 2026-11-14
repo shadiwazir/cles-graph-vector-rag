@@ -48,7 +48,7 @@ class AdviseBody(BaseModel):
     )  # earlier turns, oldest first
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, page_route: str | None = "/") -> FastAPI:
     settings = settings or get_settings()
     check_generator_allowed(settings)  # refuse to start if case text would leave our control
     setup_logging()
@@ -72,9 +72,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         verifier = CitationVerifier(conn, graph)
         return Advisor(conn, retriever, verifier, app.state.client, pack, settings)
 
-    @app.get("/", include_in_schema=False)
-    def page() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    if page_route:  # the console serves its own page and passes None
+        app.add_api_route(
+            page_route,
+            lambda: FileResponse(STATIC_DIR / "index.html"),
+            include_in_schema=False,
+        )
 
     @app.get("/health")
     def health() -> dict:

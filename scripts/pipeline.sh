@@ -19,6 +19,8 @@
 #   snapshot    dvc add + dvc push of the exports, datasets, evaluation outputs and adapters
 #   alerts-test unit tests of the Prometheus alert rules (promtool in Docker)
 #   mlflow-import --source sqlite:///file.db   copy runs of a GPU machine's MLflow file into the server
+#   console     the web console on http://localhost:${CONSOLE_PORT:-8000}: ask the advisor, results
+#               explorer, platform tools (MLflow, Grafana, Phoenix, Prometheus), about
 #   explore     results explorer on http://localhost:${EXPLORER_PORT:-8001} (reads files only)
 #   all         preflight infra data dataset train-dry
 #   status      row counts and the latest run summaries
@@ -38,6 +40,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+# A value given on the command line must win over .env (used by `console` below).
+CALLER_ALLOW_EXTERNAL="${ALLOW_EXTERNAL_GENERATOR:-}"
 
 if [[ -f .env ]]; then
   set -a
@@ -211,6 +216,13 @@ step_mlflow_import() {
   uv run python -m cles.mlflow_import --source "$SOURCE" --register cles-advisor --register-match poc
 }
 
+step_console() {
+  # Case text goes to a third party only when the caller says so on the command line.
+  [[ -n "$CALLER_ALLOW_EXTERNAL" ]] && export ALLOW_EXTERNAL_GENERATOR="$CALLER_ALLOW_EXTERNAL"
+  say "web console: http://localhost:${CONSOLE_PORT:-8000}/ (Ctrl+C to stop)"
+  exec uv run uvicorn cles.console.app:create_app --factory --port "${CONSOLE_PORT:-8000}"
+}
+
 step_explore() {
   say "results explorer: http://localhost:${EXPLORER_PORT:-8001}/ (Ctrl+C to stop)"
   exec uv run uvicorn cles.evaluation.explorer:create_app --factory --port "${EXPLORER_PORT:-8001}"
@@ -252,10 +264,11 @@ case "$STEP" in
   snapshot) step_snapshot ;;
   alerts-test) step_alerts_test ;;
   mlflow-import) step_mlflow_import ;;
+  console) step_console ;;
   explore) step_explore ;;
   all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
   status) step_status ;;
   reset) step_reset ;;
-  *) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 say "step $STEP done (logs: $LOG_DIR)"

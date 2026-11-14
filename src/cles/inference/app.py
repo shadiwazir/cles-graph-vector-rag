@@ -1,8 +1,10 @@
 """HTTP API. Run: uv run uvicorn cles.inference.app:create_app --factory --port 8000"""
 
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
 import psycopg
 from fastapi import FastAPI, HTTPException
@@ -25,6 +27,11 @@ from cles.retrieval.graph import GraphRetriever
 from cles.retrieval.hybrid import HybridRetriever
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+class FeedbackBody(BaseModel):
+    request_id: uuid.UUID
+    feedback: Literal["accept", "edit", "reject"]
 
 
 class TurnBody(BaseModel):
@@ -72,6 +79,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok", "pack": pack.info.name, "version": pack.info.version}
+
+    @app.post("/feedback")
+    def feedback(body: FeedbackBody) -> dict:
+        """The lawyer's verdict on one answer, stored on its audit row (no case text)."""
+        with connect(settings) as conn:
+            done = conn.execute(
+                "UPDATE request_audit SET feedback = %s WHERE request_id = %s",
+                (body.feedback, body.request_id),
+            ).rowcount
+            conn.commit()
+        if not done:
+            raise HTTPException(status_code=404, detail="unknown request_id")
+        return {"request_id": str(body.request_id), "feedback": body.feedback}
 
     @app.post("/advise")
     def advise(body: AdviseBody) -> dict:

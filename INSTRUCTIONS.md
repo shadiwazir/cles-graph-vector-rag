@@ -569,7 +569,7 @@ The system is usable and testable at the end of Phase 3, before any GPU money is
 | Single-jurisdiction corpus | The scope statement is shown in every answer; a second domain means a second pack |
 | flowlit adoption | Evaluated on a parallel path only (section 7.0a). The library is pre-1.0, in-memory, and has been exercised in one real client so far, so it is pinned and kept off the critical path. |
 | Orchestrator for incremental ingestion | Not needed now. Revisit when new decisions are ingested on a schedule or runs span machines (section 7.0a). |
-| Phoenix ownership and licence | A vendor comparison reported (August 2026) that Dynatrace agreed to acquire Arize, and sources disagree on whether Phoenix is Apache-2.0 or Elastic License 2.0. Verify the current licence before adopting. Instrumentation uses OpenTelemetry only, so the backend is replaceable (section 18). |
+| Phoenix ownership and licence | Resolved (2026-11-14, ADR 0007 update): the server is Elastic License 2.0 (source-available), free to self-host for internal use with no feature gates; Dynatrace closed the Arize acquisition on 1 October 2026. Internal use only, never offered to third parties. Instrumentation stays OpenTelemetry-only, so the backend remains replaceable (section 18). |
 | DagsHub terms and limits | Pricing found was secondhand; verify on the official site before any decision (section 17) |
 
 ---
@@ -743,7 +743,7 @@ CREATE TABLE IF NOT EXISTS request_audit (
 |---|---|---|
 | Self-hosting effort | One container with SQLite or Postgres | Several services (it needs ClickHouse, Redis and object storage) |
 | Strength | Tracing, retrieval and RAG diagnosis, evaluations and experiments, OpenTelemetry-native | Broad platform: tracing, prompt management, datasets, evaluations, usage and cost dashboards |
-| Concerns | Pending acquisition of Arize (reported August 2026); licence claims conflict between vendor sources, so verify | Heavier to run; vendors disagree on which features are gated in self-hosted mode, so verify |
+| Concerns | Elastic License 2.0 (source-available, free for internal use; see ADR 0007); Arize acquired by Dynatrace (closed October 2026) | Heavier to run; vendors disagree on which features are gated in self-hosted mode, so verify |
 | Fit here | Chosen: light on a laptop, enough for our needs | Reconsider if we need prompt management and team dashboards at scale |
 
 Because instrumentation is OpenTelemetry-only (section 18), this choice is reversible and is recorded as an ADR.

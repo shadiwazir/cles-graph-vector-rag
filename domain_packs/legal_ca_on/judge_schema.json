@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Judgement",
+  "type": "object",
+  "required": ["routes", "faithfulness", "unsupported_claims", "confidence"],
+  "properties": {
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "verdict", "evidence"],
+        "properties": {
+          "name": {"type": "string"},
+          "verdict": {"enum": ["supported", "partly", "unsupported"]},
+          "evidence": {"type": "string"}
+        }
+      }
+    },
+    "faithfulness": {"type": "integer", "minimum": 1, "maximum": 5},
+    "unsupported_claims": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["low", "medium", "high"]}
+  }
+}

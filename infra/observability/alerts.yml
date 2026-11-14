@@ -1,0 +1,61 @@
+# Alert rules (INSTRUCTIONS 18.3). Thresholds are starting points for a PoC with tiny traffic and a
+# 48-example evaluation: tune them with real data. No Alertmanager receiver is configured, so
+# alerts show in Prometheus (/alerts) and in the Grafana "Firing alerts" panel.
+groups:
+  - name: cles-online
+    rules:
+      - alert: CitationFailureRateHigh
+        expr: >
+          sum(increase(cles_citations_total{result="failed"}[1h]))
+          / clamp_min(sum(increase(cles_citations_total[1h])), 1) > 0.15
+          and sum(increase(cles_citations_total[1h])) >= 20
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "More than 15% of citations fail verification (1h window)"}
+      - alert: WeakEvidenceShareHigh
+        expr: >
+          sum(increase(cles_answers_total{evidence="weak"}[1h]))
+          / clamp_min(sum(increase(cles_answers_total[1h])), 1) > 0.5
+          and sum(increase(cles_answers_total[1h])) >= 10
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "Over half of the answers had weak evidence (1h window)"}
+      - alert: AnswerLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(cles_advise_duration_milliseconds_bucket[10m]))) > 60000
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "p95 answer latency above 60 seconds"}
+      - alert: GenerationFailures
+        expr: sum(increase(cles_generation_failures_total[1h])) > 3
+        labels: {severity: warning}
+        annotations: {summary: "More than 3 unusable model outputs in an hour"}
+  - name: cles-pipeline
+    rules:
+      - alert: PipelineStageFailed
+        expr: sum by (stage) (increase(cles_stage_runs_total{status="failed"}[1h])) > 0
+        labels: {severity: critical}
+        annotations: {summary: "Pipeline stage {{ $labels.stage }} failed"}
+      - alert: StageFailureShareHigh
+        expr: >
+          max by (stage) (last_over_time(cles_stage_value{metric="failed"}[1d]))
+          / clamp_min(max by (stage) (last_over_time(cles_stage_value{metric="files"}[1d])), 1) > 0.1
+        labels: {severity: warning}
+        annotations: {summary: "More than 10% of items failed in stage {{ $labels.stage }}"}
+      - alert: ExtractionCostHigh
+        expr: max(last_over_time(cles_stage_value{stage="extract",metric="cost_usd"}[1d])) > 5
+        labels: {severity: warning}
+        annotations: {summary: "One extraction run cost more than 5 USD"}
+  - name: cles-offline-quality
+    rules:
+      - alert: EvalCitationFailureHigh
+        expr: max by (system) (last_over_time(cles_eval_quality{scope="all",metric="citation_failure_rate"}[7d])) > 0.2
+        labels: {severity: warning}
+        annotations: {summary: "System {{ $labels.system }}: over 20% of evaluated citations fail verification"}
+      - alert: EvalConfidentlyWrong
+        expr: max by (system) (last_over_time(cles_eval_count{scope="all",metric="high_and_wrong"}[7d])) > 3
+        labels: {severity: warning}
+        annotations: {summary: "System {{ $labels.system }}: several wrong top routes rated high in the last evaluation"}
+      - alert: DriftCheckViolations
+        expr: max(last_over_time(cles_drift_violations[7d])) > 0
+        labels: {severity: warning}
+        annotations: {summary: "The last drift check found violations"}

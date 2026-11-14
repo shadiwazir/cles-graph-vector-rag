@@ -1,0 +1,13 @@
+# Thresholds for `drift_check` (INSTRUCTIONS 18.2 and 18.3). Starting points: with 48 evaluation
+# examples and little live traffic they are placeholders to tune, not acceptance criteria.
+regression:                 # latest evaluation versus eval/baseline.json, scope "all"
+  rates_max_drop: 0.10      # outcome, schema and stage rates may fall at most 10 points
+  counts_max_increase:      # failure counts may grow by at most this much
+    citations_failed: 5
+    high_and_wrong: 2
+    likelihood_over_cap: 3
+online:                     # request_audit, last window versus the evaluation reference
+  window_days: 7
+  min_requests: 20          # below this the online check is skipped (not enough traffic)
+  evidence_share_max_shift: 0.20   # change in the share of weak / moderate / strong answers
+  citation_failure_rate_max: 0.15

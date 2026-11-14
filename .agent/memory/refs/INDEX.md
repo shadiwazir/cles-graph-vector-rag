@@ -38,6 +38,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [ml.6] | GPU rental for the PoC (RunPod) | docs/06 |
 | [ml.7] | Phase 6 evaluation design and results | ADR 0017, docs/05 |
 | [rt.4] | Live conversational interface | ADR 0018 |
+| [ob.3] | MLflow, DVC, observability in every run | ADR 0019, docs/03 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |
 | [pl.2] | Run playbook and pipeline script | docs/07 |
 | [pr.1] | Two goals; PoC on about 100 decisions | docs/06, docs/04 |

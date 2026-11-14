@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLES results explorer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6679; --line: #d9dde5;
+    --accent: #2457c5; --ok: #1d7a46; --warn: #a15c00; --bad: #b3261e; --sel: #e8eefc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171d; --card: #1c2029; --text: #e6e9ef; --muted: #9aa3b5; --line: #323847;
+      --accent: #7aa2ff; --ok: #5ccf8c; --warn: #f0b255; --bad: #ff8a80; --sel: #26324f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 16px; margin: 20px 0 8px; }
+  h3 { font-size: 13px; margin: 12px 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  select, input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px;
+                  background: var(--card); color: var(--text); font: inherit; }
+  button { padding: 5px 12px; border: 1px solid var(--accent); border-radius: 6px;
+           background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.best { color: var(--ok); font-weight: 600; }
+  .meter { height: 6px; background: var(--line); border-radius: 3px; margin-top: 3px; width: 140px; }
+  .meter > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .ref { color: var(--muted); font-style: italic; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  #list { max-height: 78vh; overflow: auto; padding: 0; }
+  .item { padding: 6px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .item:hover { background: var(--sel); }
+  .item.sel { background: var(--sel); }
+  .item .id { font-weight: 600; }
+  .chip { display: inline-block; padding: 0 6px; margin: 1px 2px 1px 0; border-radius: 10px; font-size: 12px;
+          border: 1px solid var(--line); color: var(--muted); }
+  .chip.ok { color: var(--ok); border-color: var(--ok); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+  .col { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+  .col h2 { margin: 0 0 4px; }
+  .route { border-top: 1px solid var(--line); padding: 6px 0; }
+  p { margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .quote { color: var(--muted); border-left: 3px solid var(--line); margin: 2px 0 4px; padding-left: 8px; font-size: 12px; overflow-wrap: anywhere; }
+  ul { margin: 3px 0; padding-left: 18px; }
+  details { margin: 8px 0; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: var(--bg); padding: 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CLES results explorer</h1>
+  <div class="sub" id="meta">Loading...</div>
+
+  <h2>Statistics</h2>
+  <div class="panel">
+    <div class="bar"><label>Scope <select id="scope"></select></label>
+      <span class="sub">Rates show hits/examples that apply; green = best. With 12 examples per stage, gaps under about 15 points are noise.</span></div>
+    <div id="stats"></div>
+  </div>
+
+  <h2>Examples</h2>
+  <div class="bar">
+    <label>Stage <select id="fStage"></select></label>
+    <label>Show <select id="fKind">
+      <option value="all">all</option>
+      <option value="disagree">models disagree on the outcome</option>
+      <option value="wrong">top route wrong in some model</option>
+      <option value="cites">failed citations in some model</option>
+      <option value="high">wrong top route rated high</option>
+    </select></label>
+    <input id="fText" placeholder="search id or text">
+    <label title="Hide model names, metrics and judge scores; shuffle the columns. For unbiased labelling."><input type="checkbox" id="blind"> blind review</label>
+    <span class="sub" id="count"></span>
+    <span class="sub">(keys: j / k = next / previous)</span>
+  </div>
+  <div class="grid">
+    <div class="panel" id="list"></div>
+    <div id="detail"><div class="panel sub">Select an example.</div></div>
+  </div>
+</main>
+<script>
+"use strict";
+let DATA = null;
+let shown = [];
+let selected = null;
+const $ = (id) => document.getElementById(id);
+const NAMES = { base: "Base Qwen3-8B", finetuned: "Fine-tuned", openai: "OpenAI" };
+const nm = (s) => NAMES[s] || s;
+const pct = (c) => (c.rate === null ? "n/a" : Math.round(c.rate * 100) + "%");
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v; else if (k === "onclick") node.addEventListener("click", v); else node.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+const chip = (text, kind) => el("span", { class: "chip " + (kind || "") }, text);
+const section = (title, ...body) => [el("h3", {}, title), ...body];
+const list = (items) => el("ul", {}, ...items.map((t) => el("li", {}, t)));
+
+/* ---------- statistics ---------- */
+const RATES = [
+  ["matches the advice schema", "valid_schema"],
+  ["stage identified correctly", "stage_ok"],
+  ["top route = real outcome (late stages)", "top_outcome_ok"],
+  ["any route names the real outcome", "any_outcome_ok"],
+  ["top route remedies = real (late stages)", "remedies_ok"],
+];
+const COUNTS = [
+  ["citations claimed", "citations_claimed", null],
+  ["citations verified", "citations_verified", null],
+  ["citations failed verification", "citations_failed", "low"],
+  ["citations outside the supplied context", "citations_outside_context", "low"],
+  ["wrong top routes rated high", "high_and_wrong", "low"],
+  ["likelihoods above the evidence cap", "likelihood_over_cap", "low"],
+];
+
+function renderStats() {
+  const scope = $("scope").value;
+  const sys = DATA.systems;
+  const table = el("table", {});
+  table.append(el("tr", {}, el("th", {}, "metric"), ...sys.map((s) => el("th", {}, nm(s)))));
+  const cell = (s, key) => DATA.results[s][scope][key];
+  for (const [label, key] of RATES) {
+    const best = Math.max(...sys.map((s) => cell(s, key).rate ?? -1));
+    table.append(el("tr", {}, el("td", {}, label), ...sys.map((s) => {
+      const c = cell(s, key);
+      const td = el("td", { class: c.rate !== null && c.rate === best ? "best" : "" },
+        `${pct(c)} (${c.hits}/${c.n})`,
+        el("div", { class: "meter" }, el("i", { style: `width:${(c.rate || 0) * 100}%` })));
+      return td;
+    })));
+  }
+  const base = cell(sys[0], "majority_baseline");
+  table.append(el("tr", {}, el("td", { class: "ref" }, "reference: always predict 'dismissed' (late stages)"),
+    ...sys.map((s, i) => el("td", { class: "ref" }, i === 0 ? `${pct(base)} (${base.hits}/${base.n})` : ""))));
+  for (const [label, key, better] of COUNTS) {
+    const vals = sys.map((s) => cell(s, key));
+    const best = better === "low" ? Math.min(...vals) : null;
+    table.append(el("tr", {}, el("td", {}, label),
+      ...vals.map((v) => el("td", { class: best !== null && v === best ? "best" : "" }, v))));
+  }
+  const judged = sys.map((s) => DATA.examples.map((e) => e.answers[s].judge).filter(Boolean));
+  if (judged.some((j) => j.length)) {
+    table.append(el("tr", {}, el("td", {}, "LLM judge: mean faithfulness 1-5 (trend signal, not an acceptance gate)"),
+      ...judged.map((j) => el("td", {}, j.length ? `${(j.reduce((a, x) => a + x.faithfulness, 0) / j.length).toFixed(2)} (${j.length} answers)` : "not judged"))));
+  }
+  const labelled = sys.map((s) => DATA.examples.map((e) => e.answers[s].label).filter(Boolean));
+  if (labelled.some((l) => l.length)) {
+    table.append(el("tr", {}, el("td", {}, "Your labels: mean faithfulness / usefulness 1-5"),
+      ...labelled.map((l) => el("td", {}, l.length ? `${(l.reduce((a, x) => a + x.faithfulness, 0) / l.length).toFixed(2)} / ${(l.reduce((a, x) => a + x.usefulness, 0) / l.length).toFixed(2)} (${l.length} labelled)` : "none yet"))));
+  }
+  const examples = cell(sys[0], "examples");
+  table.append(el("tr", {}, el("td", { class: "sub" }, `examples in scope: ${examples}`),
+    ...sys.map((s) => el("td", { class: "sub" },
+      scope === "all" ? `${(DATA.extra[s].mean_routes || 0).toFixed(1)} routes, ${Math.round(DATA.extra[s].mean_output_tokens || 0)} tokens per answer` : ""))));
+  $("stats").replaceChildren(table);
+}
+
+/* ---------- list ---------- */
+function summary(ex) {
+  const m = DATA.systems.map((s) => ex.answers[s].metrics);
+  const late = m.map((x) => x.top_outcome_ok);
+  return {
+    disagree: new Set(m.map((x) => x.top_outcome)).size > 1,
+    wrong: late.some((v) => v === false),
+    cites: m.some((x) => x.cites_failed > 0),
+    high: m.some((x) => x.top_high_and_wrong),
+  };
+}
+
+function applyFilters() {
+  const stage = $("fStage").value, kind = $("fKind").value, q = $("fText").value.toLowerCase();
+  shown = DATA.examples.filter((ex) => {
+    if (stage !== "all" && ex.stage !== stage) return false;
+    if (kind !== "all" && !summary(ex)[kind]) return false;
+    return !q || (ex.example_id + " " + ex.question + " " + ex.case_text).toLowerCase().includes(q);
+  });
+  $("count").textContent = `${shown.length} of ${DATA.examples.length}`;
+  $("list").replaceChildren(...shown.map((ex) => {
+    const marks = (isBlind() ? [] : DATA.systems).map((s) => {
+      const m = ex.answers[s].metrics;
+      const ok = m.top_outcome_ok;
+      return chip(`${nm(s).split(" ")[0]} ${ok === null ? "-" : ok ? "ok" : "x"}`, ok === null ? "" : ok ? "ok" : "bad");
+    });
+    return el("div", { class: "item" + (ex === selected ? " sel" : ""), onclick: () => select(ex) },
+      el("div", {}, el("span", { class: "id" }, ex.example_id), " ", chip(ex.outcome)), el("div", {}, ...marks));
+  }));
+}
+
+function select(ex) {
+  selected = ex;
+  applyFilters();
+  renderDetail(ex);
+}
+
+function move(delta) {
+  if (!shown.length) return;
+  const i = shown.indexOf(selected);
+  select(shown[Math.min(shown.length - 1, Math.max(0, i + delta))]);
+}
+
+/* ---------- detail ---------- */
+function renderAdvice(advice, checks) {
+  const status = new Map((checks || []).map((c) => [c.case_id + "|" + c.para, c.status]));
+  const box = el("div", {});
+  if (advice.stage) box.append(el("div", {}, chip("stage: " + advice.stage), chip("evidence: " + advice.evidence_strength)));
+  if (advice.case_position) box.append(...section("Where the case stands", el("p", {}, advice.case_position)));
+  const routes = Array.isArray(advice.routes) ? advice.routes : [];
+  box.append(...section("Routes", ...routes.map((r, i) => {
+    const kind = { high: "ok", medium: "warn", low: "bad" }[r.likelihood] || "";
+    const head = el("div", {}, el("strong", {}, `${i + 1}. ${r.name || "(route)"}`), " ", chip(r.likelihood || "?", kind));
+    if (r.expected_outcome) head.append(chip(r.expected_outcome));
+    for (const rem of r.expected_remedies || []) head.append(chip(rem));
+    const node = el("div", { class: "route" }, head);
+    if (r.next_event) node.append(el("p", {}, el("em", {}, "Next: "), r.next_event));
+    if (r.reasoning) node.append(el("p", {}, el("em", {}, "Why: "), r.reasoning));
+    for (const a of r.authorities || []) {
+      const st = status.get(a.case_id + "|" + a.para);
+      node.append(el("div", {}, el("strong", {}, `${a.case_id} para ${a.para}`), " ",
+        st === undefined ? "" : st === "ok" ? chip("verified", "ok") : chip(st.replace("_", " "), "bad")),
+        el("div", { class: "quote" }, a.quote));
+    }
+    return node;
+  })));
+  if ((advice.risks || []).length) box.append(...section("Risks", list(advice.risks)));
+  if ((advice.recommended_next_steps || []).length) box.append(...section("Recommended next steps", list(advice.recommended_next_steps)));
+  if ((advice.missing_information || []).length) box.append(...section("Missing information", list(advice.missing_information)));
+  return box;
+}
+
+const isBlind = () => $("blind").checked;
+function hash(str) { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+function order(ex) {
+  const systems = [...DATA.systems];
+  return isBlind() ? systems.sort((x, y) => hash(ex.example_id + x) - hash(ex.example_id + y)) : systems;
+}
+
+function judgeBox(j) {
+  if (!j) return null;
+  const box = el("details", {}, el("summary", {}, `LLM judge: faithfulness ${j.faithfulness}/5 (${j.confidence} confidence)`));
+  box.append(list(j.routes.map((r) => `${r.name}: ${r.verdict}. Evidence: ${r.evidence}`)));
+  if (j.unsupported_claims.length) box.append(el("div", { class: "sub" }, "Unsupported claims:"), list(j.unsupported_claims));
+  return box;
+}
+
+function labelForm(ex, s, a) {
+  const pick = (id, value) => {
+    const select = el("select", { id });
+    for (let i = 1; i <= 5; i++) select.append(el("option", { value: i }, i));
+    select.value = String(value || 3);
+    return select;
+  };
+  const faith = pick(`f-${s}`, a.label && a.label.faithfulness);
+  const use = pick(`u-${s}`, a.label && a.label.usefulness);
+  const comment = el("input", { placeholder: "comment (optional)", style: "width:100%" });
+  comment.value = (a.label && a.label.comment) || "";
+  const status = el("span", { class: "sub" }, a.label ? "saved" : "not labelled");
+  const save = el("button", {}, "Save review");
+  save.addEventListener("click", async () => {
+    const body = { example_id: ex.example_id, system: s, faithfulness: +faith.value, usefulness: +use.value, comment: comment.value };
+    try {
+      const res = await fetch("/api/label", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(await res.text());
+      a.label = await res.json();
+      status.textContent = "saved";
+    } catch (err) { status.textContent = "not saved: " + err.message; }
+  });
+  return el("div", { class: "panel", style: "margin-top:8px" },
+    el("div", { class: "sub" }, "Your review"),
+    el("div", { class: "bar" }, el("label", {}, "Faithful to the context (1-5) ", faith), el("label", {}, "Useful to a lawyer (1-5) ", use)),
+    comment, el("div", { class: "bar" }, save, status));
+}
+
+function systemColumn(ex, s, position) {
+  const a = ex.answers[s], m = a.metrics;
+  const blind = isBlind();
+  const col = el("div", { class: "col" }, el("h2", {}, blind ? `Answer ${"ABC"[position] || position + 1}` : nm(s)));
+  const flag = (text, ok) => chip(text, ok ? "ok" : "bad");
+  if (!blind) col.append(el("div", {},
+    flag(m.schema_valid ? "schema ok" : "schema errors", m.schema_valid),
+    flag(m.stage_ok ? "stage ok" : "stage wrong", m.stage_ok),
+    m.top_outcome_ok === null ? chip("top route: n/a (early stage)") : flag(m.top_outcome_ok ? "top route = real outcome" : "top route wrong", m.top_outcome_ok),
+    flag(m.any_outcome_ok ? "an alternative route has the real outcome" : "no route has the real outcome", m.any_outcome_ok),
+    m.cites_failed ? chip(`${m.cites_failed} citation(s) failed`, "bad") : chip("no failed citations", "ok"),
+    m.top_high_and_wrong ? chip("wrong and rated high", "bad") : "",
+    m.likelihood_over_cap ? chip(`${m.likelihood_over_cap} likelihood above cap`, "warn") : ""));
+  if (!blind && a.judge) col.append(judgeBox(a.judge));
+  if (a.schema_errors.length) col.append(el("details", {}, el("summary", {}, "Schema problems"), list(a.schema_errors)));
+  if (a.advice) col.append(renderAdvice(a.advice, a.citation_checks));
+  else col.append(el("p", { class: "chip bad" }, "Not valid JSON"), el("pre", {}, a.raw || ""));
+  col.append(labelForm(ex, s, a));
+  return col;
+}
+
+function renderDetail(ex) {
+  const head = el("div", { class: "panel" },
+    el("div", {}, el("strong", {}, ex.example_id), " ", chip("stage: " + ex.stage), chip("evidence given: " + ex.evidence_strength)),
+    isBlind() ? null : el("div", {}, "Real outcome: ", chip(ex.outcome, "ok"), ...(ex.remedies.length ? ex.remedies.map((r) => chip(r, "ok")) : [chip("no remedies")])),
+    el("p", {}, el("strong", {}, "Question: "), ex.question),
+    el("details", {}, el("summary", {}, "Case text given to every model"), el("p", {}, ex.case_text)),
+    el("div", { class: "sub" }, "Context decisions supplied: " + (ex.context_docs.join(", ") || "none")));
+  const cols = el("div", { class: "cols" }, ...order(ex).map((s, i) => systemColumn(ex, s, i)));
+  const parts = [head, cols];
+  if (ex.target && !isBlind()) {
+    parts.push(el("details", { class: "panel" },
+      el("summary", {}, "Training target (written by an LLM with hindsight; reference only, not ground truth)"),
+      renderAdvice(ex.target, [])));
+  }
+  $("detail").replaceChildren(...parts);
+}
+
+/* ---------- start ---------- */
+async function start() {
+  try {
+    const res = await fetch("/api/data");
+    if (!res.ok) throw new Error(await res.text());
+    DATA = await res.json();
+  } catch (err) {
+    $("meta").textContent = "Could not load results: " + err.message;
+    return;
+  }
+  $("meta").textContent = `${DATA.examples.length} held-out examples from ${DATA.dataset}; systems: ` +
+    DATA.systems.map((s) => `${nm(s)} (${DATA.extra[s].model})`).join(", ");
+  const scopes = Object.keys(DATA.results[DATA.systems[0]]);
+  $("scope").replaceChildren(...scopes.map((s) => el("option", { value: s }, s === "all" ? "all stages" : s)));
+  const stages = ["all", ...scopes.filter((s) => s !== "all")];
+  $("fStage").replaceChildren(...stages.map((s) => el("option", { value: s }, s === "all" ? "all stages" : s)));
+  $("scope").addEventListener("change", renderStats);
+  for (const id of ["fStage", "fKind"]) $(id).addEventListener("change", applyFilters);
+  $("fText").addEventListener("input", applyFilters);
+  $("blind").addEventListener("change", () => { applyFilters(); if (selected) renderDetail(selected); });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.key === "j") move(1); else if (e.key === "k") move(-1);
+  });
+  renderStats();
+  applyFilters();
+  if (shown.length) select(shown[0]);
+}
+start();
+</script>
+</body>
+</html>

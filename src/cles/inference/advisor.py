@@ -163,8 +163,9 @@ class Advisor:
         self._conn.execute(
             """INSERT INTO request_audit
                (request_id, manifest_id, prompt_version, retrieved_ids, evidence_strength,
-                citations_total, citations_failed, latency_ms, question_text)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                citations_total, citations_failed, latency_ms, question_text,
+                adapter_version, environment)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 uuid.UUID(r.request_id),
                 manifest[0] if manifest else None,
@@ -175,6 +176,8 @@ class Advisor:
                 r.citations_failed,
                 r.latency_ms,
                 req.question if self._settings.audit_store_question else None,
+                self._settings.adapter_version or self._client.model,
+                self._settings.audit_environment,
             ),
         )
         self._conn.commit()

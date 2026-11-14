@@ -23,3 +23,4 @@ decision gets a new ADR that supersedes the old one.
 | 0016 | Fine-tuning run design: model, sequence length, tracking and data transfer |
 | 0017 | Model evaluation design: same prompts, real outcomes, single attempt |
 | 0018 | Conversation support: earlier turns folded into the case text |
+| 0019 | MLflow, DVC and observability are part of every run |

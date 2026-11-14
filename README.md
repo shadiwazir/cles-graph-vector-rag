@@ -48,6 +48,20 @@ ALLOW_EXTERNAL_GENERATOR=true uv run uvicorn cles.inference.app:create_app --fac
 
 With the API running (see above), open `http://localhost:8000/`. Type the case context once, then ask questions; each question is sent with all earlier questions and answers (the oldest are trimmed to a token budget, `CONVERSATION_HISTORY_TOKENS`). Nothing is stored in the browser or on the server. For a fine-tuned model on a GPU machine, point `LLM_BASE_URL` at it through an SSH tunnel (`docs/06-training-runbook.md`). Design: `docs/adr/0018-conversation-support.md`.
 
+## Explore the evaluation results
+
+After `eval_generate` (per system) and `eval_score`, compare the systems side by side:
+
+```bash
+scripts/pipeline.sh explore        # or: uv run uvicorn cles.evaluation.explorer:create_app --factory --port 8001
+```
+
+Open `http://localhost:8001/`: statistics per system (overall and per stage), a filterable example list (models disagree, wrong top route, failed citations, wrong but rated high) and, per example, the real outcome with the three answers in columns. It reads `artifacts/eval/` only: no database, no model, no network. Rerun `eval_score` to refresh (the page reloads the data on the next request).
+
+## Tracking and observability (part of every run)
+
+`scripts/pipeline.sh infra` starts the full stack (MLflow :5000, Grafana :3000, Phoenix :6006, Prometheus :9090). Every stage then logs an MLflow run and telemetry, evaluations log one MLflow run per system and quality gauges, and DVC snapshots follow the data steps. Check results with `scripts/pipeline.sh eval-score` (scores, snapshot, drift check), `scripts/pipeline.sh judge` (LLM-judge, paid), `scripts/pipeline.sh alerts-test`, and `dvc metrics diff <rev>`. Where to look and why: `docs/07-run-playbook.md`, `docs/adr/0019-tracking-and-observability-in-every-run.md`.
+
 ## Optional profiles
 
 - Observability (Phoenix, Prometheus, Grafana): `docker compose --env-file .env -f infra/docker-compose.yml --profile observability up -d`.

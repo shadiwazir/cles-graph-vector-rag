@@ -1,0 +1,55 @@
+# Unit tests for alerts.yml. Run: scripts/pipeline.sh alerts-test
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+tests:
+  - name: citation failures above 15 percent fire
+    interval: 1m
+    input_series:
+      - {series: 'cles_citations_total{result="verified"}', values: '0+5x120'}
+      - {series: 'cles_citations_total{result="failed"}', values: '0+3x120'}
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: CitationFailureRateHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "More than 15% of citations fail verification (1h window)"}
+  - name: few citation failures stay quiet
+    interval: 1m
+    input_series:
+      - {series: 'cles_citations_total{result="verified"}', values: '0+9x120'}
+      - {series: 'cles_citations_total{result="failed"}', values: '0+0x120'}
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: CitationFailureRateHigh
+        exp_alerts: []
+  - name: a failed stage fires
+    interval: 1m
+    input_series:
+      - {series: 'cles_stage_runs_total{stage="extract",status="failed"}', values: '0 0 1 1 1 1'}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PipelineStageFailed
+        exp_alerts:
+          - exp_labels: {severity: critical, stage: extract}
+            exp_annotations: {summary: "Pipeline stage extract failed"}
+  - name: confidently wrong evaluation fires for one system only
+    interval: 1m
+    input_series:
+      - {series: 'cles_eval_count{system="finetuned",scope="all",metric="high_and_wrong"}', values: '9x10'}
+      - {series: 'cles_eval_count{system="base",scope="all",metric="high_and_wrong"}', values: '0x10'}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EvalConfidentlyWrong
+        exp_alerts:
+          - exp_labels: {severity: warning, system: finetuned}
+            exp_annotations: {summary: "System finetuned: several wrong top routes rated high in the last evaluation"}
+  - name: drift violations fire
+    interval: 1m
+    input_series:
+      - {series: 'cles_drift_violations', values: '2x10'}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DriftCheckViolations
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "The last drift check found violations"}

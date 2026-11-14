@@ -11,3 +11,8 @@ systems:
     backend: hf
     base_model: Qwen/Qwen3-8B
     adapter: artifacts/runs/3a752888/adapter
+  finetuned_noretrieval:   # the same adapter, prompts without passages and graph facts (needs a GPU)
+    backend: hf
+    base_model: Qwen/Qwen3-8B
+    adapter: artifacts/runs/3a752888/adapter
+    without_retrieval: true

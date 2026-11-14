@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     embedding_device: Literal["auto", "cpu", "cuda"] = "auto"
     embedding_batch_size: int = 32
 
+    audit_environment: str = "live"  # "test" for tests and smoke runs: drift checks ignore them
+    adapter_version: str | None = None  # for example "cles-advisor v1"; default: the model name
     audit_store_question: bool = False  # store question text in request_audit (privacy: off)
 
     # Retrieval
@@ -67,6 +69,12 @@ class Settings(BaseSettings):
     eval_system: str = "openai"  # which entry of eval_systems_file to generate with
     eval_systems_file: Path = Path("eval/systems.yaml")
     eval_out_dir: Path = Path("artifacts/eval")
+    eval_metrics_file: Path = Path("metrics/eval.json")  # git-tracked, for `dvc metrics`
+    drift_thresholds_file: Path = Path("eval/thresholds.yaml")
+    drift_baseline_file: Path = Path("eval/baseline.json")  # git-tracked
+    drift_update_baseline: bool = False  # make the latest evaluation the new baseline
+    judge_model: str = "gpt-5.4-mini"  # prefer another model family than the generator
+    eval_labels_file: Path = Path("eval/labels/labels.jsonl")  # human review, git-tracked
     eval_max_new_tokens: int = 2000
     eval_batch_size: int = 4
     # Hosts we control that may receive case text besides localhost (for example a rented GPU
@@ -84,6 +92,7 @@ class Settings(BaseSettings):
     domain_packs_dir: Path = Path("domain_packs")
 
     # Tracking and telemetry
+    mlflow_enabled: bool = True  # track every stage and evaluation (best effort, never blocks)
     mlflow_tracking_uri: str = "http://localhost:5000"
     mlflow_registered_model: str | None = None  # register the adapter under this name when set
     telemetry_enabled: bool = False  # export traces and metrics to the OTLP endpoint

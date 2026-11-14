@@ -84,6 +84,7 @@ def _summary(rows: list[dict]) -> dict:
     failed = sum(r["cites_failed"] for r in rows)
     return {
         "examples": len(rows),
+        "citation_failure_rate": failed / verified_total if verified_total else None,
         "valid_json": _rate([r["parsed"] for r in rows]),
         "valid_schema": _rate([r["schema_valid"] for r in rows]),
         "stage_ok": _rate([r["stage_ok"] for r in rows]),

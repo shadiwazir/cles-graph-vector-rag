@@ -134,7 +134,31 @@ function renderAnswer(data) {
     `${data.latency_ms} ms; citations verified ${data.citations_total - data.citations_failed}/${data.citations_total}; ` +
     `earlier turns sent ${h.turns_sent || 0}, dropped ${h.turns_dropped || 0}; prompt ${data.prompt_version}`));
   card.append(el("div", { class: "meta" }, data.scope + " " + data.disclaimer));
+  card.append(feedbackBar(data.request_id));
   return card;
+}
+
+function feedbackBar(requestId) {
+  const status = el("span", { class: "meta" }, "");
+  const bar = el("div", { class: "row" }, el("span", { class: "meta" }, "Your verdict:"));
+  for (const verdict of ["accept", "edit", "reject"]) {
+    const button = el("button", { class: "secondary" }, verdict);
+    button.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request_id: requestId, feedback: verdict }),
+        });
+        status.textContent = res.ok ? `saved: ${verdict}` : `not saved (${res.status})`;
+      } catch (err) {
+        status.textContent = "not saved: " + err.message;
+      }
+    });
+    bar.append(button);
+  }
+  bar.append(status);
+  return bar;
 }
 
 async function send() {

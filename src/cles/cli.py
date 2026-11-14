@@ -16,6 +16,7 @@ STAGES: dict[str, str] = {
     "embed": "cles.ingestion.embed",
     "build_indexes": "cles.ingestion.build_indexes",
     "extract": "cles.extraction.extract",
+    "export_extractions": "cles.extraction.export",
     "graph_load": "cles.graph.load",
     "record_manifest": "cles.manifest",
     "evaluate": "cles.evaluation.run",
@@ -24,6 +25,9 @@ STAGES: dict[str, str] = {
     "train_sft": "cles.training.train_sft",
     "eval_generate": "cles.evaluation.generate",
     "eval_score": "cles.evaluation.score",
+    "judge_eval": "cles.evaluation.judge",
+    "judge_calibrate": "cles.evaluation.calibrate",
+    "drift_check": "cles.evaluation.drift",
 }
 
 

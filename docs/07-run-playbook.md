@@ -27,13 +27,19 @@ The steps up to `train-dry` run on the laptop. `train` needs a GPU machine and i
 | Step | What it runs | Paid | Notes |
 |------|--------------|------|-------|
 | `preflight` | tool and `.env` checks, PDF count, `pytest`, `validate_pack` | no | `SKIP_TESTS=1` skips pytest |
-| `infra` | `docker compose up -d postgres neo4j`, waits for healthy | no | Flyway migrates the schema first |
+| `infra` | whole stack: Postgres, Neo4j, MLflow, Collector, Phoenix, Prometheus, Grafana; waits for healthy | no | Flyway migrates the schema first; turns telemetry on |
 | `data` | `ingest embed build_indexes extract graph_load record_manifest` | `extract` | gate before `extract` |
 | `dataset` | `build_dataset check_dataset` | `build_dataset` | gate before the build |
 | `train-dry` | `train_sft --dry-run` | no | leakage re-check, token statistics, template preview |
 | `train` | `train_sft` | no (GPU time) | run on the GPU machine |
 | `eval` | `eval_generate` (OpenAI baseline), `eval_score` | yes | gate before generation; public decisions only |
 | `eval-score` | `eval_score` | no | scores every system found in `artifacts/eval/*/outputs.jsonl` |
+| `judge` | `judge_eval`, `eval_score`, `judge_calibrate` | yes | public decisions only; about $1 to 2 for 144 answers |
+| `drift` | `drift_check` | no | exit 5 when violations are found (eval vs baseline, live traffic vs reference) |
+| `snapshot` | `dvc add` + `dvc push` | no | exports, datasets, eval outputs, adapters; runs automatically after the data steps |
+| `alerts-test` | `promtool test rules` | no | unit tests of the Prometheus alert rules |
+| `mlflow-import` | `cles.mlflow_import` | no | `--source sqlite:///file.db`: copy a GPU machine's runs into the server and register adapters |
+| `explore` | results explorer web page | no | reads `artifacts/eval/` only; port `EXPLORER_PORT` (8001) |
 | `all` | `preflight infra data dataset train-dry` | yes | |
 | `status` | row counts, latest runs, datasets | no | |
 | `reset` | drops Postgres and Neo4j volumes | no | `CONFIRM_RESET=1`; also deletes the paid caches |
@@ -82,7 +88,21 @@ Each run writes `artifacts/pipeline/<timestamp>/`: `<stage>.log` (stdout), `<sta
 
 1. `CONFIRM_PAID=1 scripts/pipeline.sh eval`: the OpenAI baseline on the held-out examples (about $0.5 to 1), then the score.
 2. On the GPU machine, for each local system: `scripts/gpu_setup.sh eval base` and `scripts/gpu_setup.sh eval finetuned`, each followed by `scripts/gpu_setup.sh wait eval-<system>` (about 10 to 20 minutes each). Copy `artifacts/eval/<system>/outputs.jsonl` back.
-3. `scripts/pipeline.sh eval-score` rebuilds `artifacts/eval/report.md`. Systems are defined in `eval/systems.yaml`.
+3. `scripts/pipeline.sh eval-score` rebuilds `artifacts/eval/report.md` and `report.json`. Systems are defined in `eval/systems.yaml`.
+4. `scripts/pipeline.sh explore` opens the results explorer (side-by-side answers and statistics) on port 8001.
+
+## Where to look
+
+| Tool | URL | What it shows |
+|------|-----|---------------|
+| MLflow | http://localhost:5000 | one run per stage run (`cles-pipeline`), per evaluated system (`cles-eval`), training runs (`cles-sft`), model registry `cles-advisor`; compare runs side by side |
+| Grafana | http://localhost:3000 | `CLES model quality and pipeline` (scores per system, progress per evaluation, cost), `CLES overview` (runtime) |
+| Phoenix | http://127.0.0.1:6006 | traces of stages and requests (internal use only, ADR 0007) |
+| Prometheus | http://localhost:9090/alerts | alert rules and their state |
+| Explorer | http://localhost:8001 | answers of all systems side by side, your labels (blind mode), judge scores |
+| DVC | `dvc metrics diff <rev>` | evaluation scores between commits |
+
+After a GPU session: copy `artifacts/mlflow.db` back as `artifacts/mlflow-gpu.db`, then `scripts/pipeline.sh mlflow-import --source sqlite:///artifacts/mlflow-gpu.db`.
 
 ## Duration notes (laptop, 105 decisions)
 

@@ -1,0 +1,4 @@
+# Metrics tracked with `dvc metrics show` and `dvc metrics diff <rev>`: every commit carries the
+# scores of the evaluation it was made with (written by the eval_score stage, committed with git).
+metrics:
+  - metrics/eval.json

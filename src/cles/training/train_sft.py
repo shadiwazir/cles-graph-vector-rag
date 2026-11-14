@@ -5,6 +5,7 @@ docs/06-training-runbook.md). `--dry-run` loads only the tokenizer: it checks th
 against the leakage rules, measures token lengths and prints a time and cost estimate.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -204,8 +205,13 @@ def _train(cfg, settings: Settings, train, eval_set, manifest, folder: Path, run
         mlflow.log_artifact(str(folder / "manifest.json"), "dataset")
         version = None
         if settings.mlflow_registered_model:
-            version = mlflow.register_model(
-                f"runs:/{active.info.run_id}/adapter", settings.mlflow_registered_model
+            client = mlflow.MlflowClient()
+            with contextlib.suppress(mlflow.exceptions.MlflowException):  # already exists
+                client.create_registered_model(settings.mlflow_registered_model)
+            version = client.create_model_version(
+                settings.mlflow_registered_model,
+                source=f"{active.info.artifact_uri}/adapter",
+                run_id=active.info.run_id,
             ).version
     return {
         "mlflow_run_id": active.info.run_id,

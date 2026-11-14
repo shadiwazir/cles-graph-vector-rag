@@ -11,6 +11,7 @@ ALLOW_EXTERNAL_GENERATOR). The `hf` backend needs a GPU (Unsloth, same 4-bit loa
 
 import json
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -42,9 +43,27 @@ def load_system(settings: Settings) -> dict:
     return systems[settings.eval_system]
 
 
-def prompt_of(example: dict) -> list[dict]:
+_PASSAGES = re.compile(r"(RETRIEVED PASSAGES[^\n]*\n).*?(\n\nGRAPH FACTS)", re.S)
+_GRAPH = re.compile(r"(GRAPH FACTS[^\n]*\n).*?(\n\nRetrieval found)", re.S)
+
+
+def strip_context(user_message: str) -> str:
+    """The same prompt without retrieval: no passages, no graph facts, weak evidence. For the
+    baseline 'fine-tuned model without retrieval' (INSTRUCTIONS 14)."""
+    text = _PASSAGES.sub(r"\1(none found)\2", user_message)
+    text = _GRAPH.sub(r"\1(none)\2", text)
+    return re.sub(r"Retrieval found \w+ evidence\.", "Retrieval found weak evidence.", text)
+
+
+def prompt_of(example: dict, without_retrieval: bool = False) -> list[dict]:
     """System and user messages of the example (the stored assistant message is the target)."""
-    return [m for m in example["messages"] if m["role"] != "assistant"]
+    messages = [m for m in example["messages"] if m["role"] != "assistant"]
+    if without_retrieval:
+        messages = [
+            {**m, "content": strip_context(m["content"])} if m["role"] == "user" else m
+            for m in messages
+        ]
+    return messages
 
 
 def read_done(path: Path) -> dict[str, dict]:
@@ -106,7 +125,7 @@ def run(ctx: StageContext) -> dict:
     return summary
 
 
-def _openai_generator(settings: Settings):
+def _openai_generator(settings: Settings, system: dict):
     check_generator_allowed(settings)
     client = make_client(settings)
 
@@ -148,7 +167,10 @@ def _hf_generator(settings: Settings, system: dict):
             batch = ordered[i : i + size]
             texts = [
                 tokenizer.apply_chat_template(
-                    prompt_of(e), tokenize=False, add_generation_prompt=True, enable_thinking=False
+                    prompt_of(e, system.get("without_retrieval", False)),
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
                 )
                 for e in batch
             ]

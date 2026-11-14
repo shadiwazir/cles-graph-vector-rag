@@ -63,6 +63,7 @@ Run: `uv run pytest`, `uv run ruff check .`.
 
 - Unit tests (`tests/test_eval_models.py`): answer parsing (think blocks, code fences, bad JSON, schema errors); outcome and remedy scoring; early-stage handling; citations outside the context; likelihood cap violations; aggregation per stage with the majority baseline.
 - Run: `eval_generate` once per system (`EVAL_SYSTEM=openai|base|finetuned`), then `eval_score` writes `artifacts/eval/report.md` and `report.json`.
+- Exploring the result: `scripts/pipeline.sh explore` (`cles.evaluation.explorer`, tests in `tests/test_explorer.py`) shows statistics and the answers of all systems side by side.
 - Reading the result: 12 examples per stage; differences under about 15 points are noise. Compare with the majority-class reference, not with 100 percent.
 
 ### Result of the PoC evaluation (2026-11-14)

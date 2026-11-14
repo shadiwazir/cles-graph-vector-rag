@@ -86,6 +86,23 @@ def test_history_is_folded_into_the_prompt(client):
     assert data["extra"]["history"] == {"turns_sent": 1, "turns_dropped": 0}
 
 
+def test_feedback_is_stored_on_the_audit_row(client):
+    body = {
+        "case_text": "The accused pleaded guilty to child luring; the Crown appeals the sentence.",
+        "question": "What are the prospects on appeal?",
+    }
+    request_id = client.post("/advise", json=body).json()["request_id"]
+    ok = client.post("/feedback", json={"request_id": request_id, "feedback": "reject"})
+    assert ok.status_code == 200
+    bad = client.post("/feedback", json={"request_id": request_id, "feedback": "maybe"})
+    assert bad.status_code == 422
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert (
+        client.post("/feedback", json={"request_id": unknown, "feedback": "accept"}).status_code
+        == 404
+    )
+
+
 def test_validation_rejects_short_input(client):
     assert client.post("/advise", json={"case_text": "x", "question": "y"}).status_code == 422
 

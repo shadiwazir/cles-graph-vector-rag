@@ -92,3 +92,23 @@ def test_aggregate_per_stage_and_majority_baseline():
     assert result["lower_court_decision"]["examples"] == 2
     assert result["facts"]["top_outcome_ok"]["rate"] is None
     assert json.dumps(result)
+
+
+def test_strip_context_removes_passages_and_graph_facts():
+    from cles.evaluation.generate import prompt_of, strip_context
+
+    user = (
+        "CASE (as described by the lawyer):\nc\n\nQUESTION:\nq\n\n"
+        "RETRIEVED PASSAGES (cite only these):\n[A para 1] T\ntext\n\n"
+        "GRAPH FACTS (structured, from earlier decisions):\nfact: {}\n\n"
+        "Retrieval found strong evidence."
+    )
+    stripped = strip_context(user)
+    assert "text" not in stripped and "fact: {}" not in stripped
+    assert "(none found)" in stripped and "(none)" in stripped
+    assert stripped.endswith("Retrieval found weak evidence.") and "CASE" in stripped
+    example = {"messages": [{"role": "system", "content": "s"}, {"role": "user", "content": user}]}
+    assert (
+        prompt_of(example, True)[1]["content"] == stripped
+        and prompt_of(example)[1]["content"] == user
+    )

@@ -5,13 +5,21 @@
 #
 # Steps (run in this order by `all`):
 #   preflight   check tools, .env, PDFs, pack; run the unit tests
-#   infra       start Postgres + Neo4j (Flyway migrates the schema) and wait until healthy
+#   infra       start the whole stack: Postgres, Neo4j (Flyway migrates the schema), MLflow,
+#               OpenTelemetry Collector, Phoenix, Prometheus, Grafana; wait until healthy
 #   data        ingest embed build_indexes extract graph_load record_manifest   (extract is PAID)
 #   dataset     build_dataset check_dataset                                       (build_dataset is PAID)
 #   train       train_sft   (needs a GPU; on a laptop use `train-dry`)
 #   train-dry   train_sft --dry-run: leakage re-check, token statistics, template preview
 #   eval        eval_generate with the OpenAI baseline (PAID), then eval_score
 #   eval-score  eval_score only: score every system in artifacts/eval/*/outputs.jsonl
+#   judge       judge_eval (PAID, public decisions only), eval_score, judge_calibrate
+#   drift       drift_check: latest evaluation vs eval/baseline.json, live traffic vs reference
+#               (exit 5 when there are violations)
+#   snapshot    dvc add + dvc push of the exports, datasets, evaluation outputs and adapters
+#   alerts-test unit tests of the Prometheus alert rules (promtool in Docker)
+#   mlflow-import --source sqlite:///file.db   copy runs of a GPU machine's MLflow file into the server
+#   explore     results explorer on http://localhost:${EXPLORER_PORT:-8001} (reads files only)
 #   all         preflight infra data dataset train-dry
 #   status      row counts and the latest run summaries
 #   reset       DESTROY the Postgres and Neo4j volumes (needs CONFIRM_RESET=1)
@@ -38,6 +46,12 @@ if [[ -f .env ]]; then
   set +a
 fi
 
+# MLflow, DVC and telemetry are part of every step: telemetry is switched on whenever the
+# collector answers, MLflow tracking is best effort inside every stage (cles.tracking).
+if curl -s -o /dev/null --max-time 1 "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}"; then
+  export TELEMETRY_ENABLED=true
+fi
+
 export DATA_DIR="${PIPELINE_DATA_DIR:-data/criminal_and_civil}"
 export LLM_PRICE_INPUT_PER_MTOK="${LLM_PRICE_INPUT_PER_MTOK:-0.75}"
 export LLM_PRICE_OUTPUT_PER_MTOK="${LLM_PRICE_OUTPUT_PER_MTOK:-4.50}"
@@ -51,9 +65,11 @@ LOG_DIR="$LOG_ROOT/$RUN_TAG"
 STEP="${1:-}"
 [[ $# -gt 0 ]] && shift
 LIMIT_ARGS=()
+SOURCE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --limit) LIMIT_ARGS=(--limit "$2"); shift 2 ;;
+    --source) SOURCE="$2"; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -104,25 +120,52 @@ step_preflight() {
 }
 
 step_infra() {
-  "${COMPOSE[@]}" up -d postgres neo4j >&2
+  "${COMPOSE[@]}" --profile observability --profile training up -d >&2
   for _ in $(seq 1 30); do
     local bad
     bad="$("${COMPOSE[@]}" ps --format '{{.Name}} {{.Health}}' postgres neo4j | grep -vc healthy || true)"
-    [[ "$bad" == "0" ]] && { say "postgres and neo4j healthy"; return; }
+    if [[ "$bad" == "0" ]] \
+      && curl -sf -o /dev/null http://localhost:5000/health \
+      && curl -s -o /dev/null http://127.0.0.1:6006/ \
+      && curl -sf -o /dev/null http://localhost:9090/-/ready; then
+      say "stack healthy: postgres, neo4j, mlflow :5000, phoenix :6006, prometheus :9090, grafana :3000"
+      export TELEMETRY_ENABLED=true
+      return
+    fi
     sleep 5
   done
   die "services did not become healthy"
 }
 
+# Version data with DVC after the step that produced it, so the next step records the new hash.
+# Best effort: DVC trouble is reported, it does not stop the pipeline.
+snapshot() {
+  say "dvc snapshot: $*"
+  uv run dvc add "$@" >&2 && uv run dvc push >&2 \
+    || say "WARNING: dvc snapshot failed for $* (run scripts/pipeline.sh snapshot to retry)"
+  say "commit the changed .dvc files with git to pin these versions"
+}
+
+step_snapshot() {
+  local paths=()
+  for p in artifacts/exports artifacts/datasets artifacts/eval artifacts/runs data; do
+    [[ -e "$p" ]] && paths+=("$p")
+  done
+  snapshot "${paths[@]}"
+}
+
 step_data() {
   run_stages ingest embed build_indexes
   paid_gate extract
-  run_stages extract graph_load record_manifest
+  run_stages extract export_extractions
+  snapshot artifacts/exports
+  run_stages graph_load record_manifest
 }
 
 step_dataset() {
   paid_gate build_dataset
   run_stages build_dataset check_dataset
+  snapshot artifacts/datasets
 }
 
 # Baseline answers from the configured LLM on the held-out examples. The examples are public
@@ -130,10 +173,48 @@ step_dataset() {
 step_eval() {
   EVAL_SYSTEM=openai paid_gate eval_generate
   EVAL_SYSTEM=openai ALLOW_EXTERNAL_GENERATOR=true run_stages eval_generate
-  run_stages eval_score
+  step_eval_score
 }
 
-step_eval_score() { run_stages eval_score; }
+# Score, then version the outputs and check for regressions (exit 5 on violations).
+step_eval_score() {
+  run_stages eval_score
+  snapshot artifacts/eval
+  step_drift
+}
+
+# LLM-as-judge faithfulness of every evaluated answer, then calibration against your labels.
+step_judge() {
+  paid_gate judge_eval
+  ALLOW_EXTERNAL_GENERATOR=true run_stages judge_eval
+  run_stages eval_score judge_calibrate
+  snapshot artifacts/eval
+}
+
+step_drift() {
+  run_stages drift_check
+  local violations
+  violations="$(tail -1 "$LOG_DIR/drift_check.log" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("violations", 0))')"
+  if [[ "$violations" != "0" ]]; then
+    tail -1 "$LOG_DIR/drift_check.log" | python3 -c 'import json,sys; [print("  -", p) for p in json.load(sys.stdin).get("problems", [])]' >&2
+    die "drift check found $violations violation(s)" 5
+  fi
+}
+
+step_alerts_test() {
+  docker run --rm --entrypoint promtool -v "$PWD/infra/observability:/w:ro" prom/prometheus:v3.16.0 \
+    test rules /w/alerts_test.yml >&2
+}
+
+step_mlflow_import() {
+  [[ -n "$SOURCE" ]] || die "usage: scripts/pipeline.sh mlflow-import --source sqlite:///artifacts/mlflow-gpu.db" 2
+  uv run python -m cles.mlflow_import --source "$SOURCE" --register cles-advisor --register-match poc
+}
+
+step_explore() {
+  say "results explorer: http://localhost:${EXPLORER_PORT:-8001}/ (Ctrl+C to stop)"
+  exec uv run uvicorn cles.evaluation.explorer:create_app --factory --port "${EXPLORER_PORT:-8001}"
+}
 
 step_train() { run_stages train_sft; }
 
@@ -166,9 +247,15 @@ case "$STEP" in
   train-dry) step_train_dry ;;
   eval) step_eval ;;
   eval-score) step_eval_score ;;
+  judge) step_judge ;;
+  drift) step_drift ;;
+  snapshot) step_snapshot ;;
+  alerts-test) step_alerts_test ;;
+  mlflow-import) step_mlflow_import ;;
+  explore) step_explore ;;
   all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
   status) step_status ;;
   reset) step_reset ;;
-  *) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 say "step $STEP done (logs: $LOG_DIR)"

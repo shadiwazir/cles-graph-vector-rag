@@ -8,7 +8,9 @@ report.md. No paid calls. Systems are compared on the same examples only.
 import json
 import logging
 from datetime import date
+from pathlib import Path
 
+import yaml
 from jsonschema import Draft202012Validator
 
 from cles.config import get_settings
@@ -16,11 +18,15 @@ from cles.db import connect, recorded_run
 from cles.domain.pack import load_pack
 from cles.evaluation.answers import parse_answer
 from cles.evaluation.generate import load_eval_examples, read_done
+from cles.evaluation.judge import mean_faithfulness
 from cles.evaluation.scoring import aggregate, score_answer
 from cles.graph.client import make_driver
 from cles.inference.verifier import CitationVerifier
+from cles.observability import metrics as m
 from cles.retrieval.graph import GraphRetriever
 from cles.stage import StageContext, stage_main
+from cles.tracking import flatten_scopes as flatten
+from cles.tracking import log_eval_runs
 
 log = logging.getLogger(__name__)
 
@@ -64,30 +70,87 @@ def run(ctx: StageContext) -> dict:
                 for e in examples:
                     advice, errors = parse_answer(answers[e["example_id"]]["text"], validator)
                     total = failed = 0
+                    checks: list[dict] = []  # per citation: kept so the explorer can mark them
                     if advice is not None and isinstance(advice.get("routes"), list):
                         try:
                             report = verifier.verify(advice, date.fromisoformat(e["as_of"]))
                             total, failed = report.total, report.failed
+                            checks = [
+                                {"case_id": c.case_id, "para": c.para, "status": c.status}
+                                for c in report.checks
+                            ]
                         except Exception as exc:  # malformed authority objects
                             log.warning("verify failed for %s/%s: %s", name, e["example_id"], exc)
-                    rows[name].append(score_answer(e, advice, errors, early, caps, total, failed))
+                    row = score_answer(e, advice, errors, early, caps, total, failed)
+                    rows[name].append({**row, "citation_checks": checks})
             stats.update(systems=list(outputs), examples=len(examples))
     finally:
         driver.close()
 
     results = {name: aggregate(r) for name, r in rows.items()}
+    for name in results:  # LLM-judge faithfulness, when `judge_eval` has run (a trend signal)
+        judged = mean_faithfulness(settings.eval_out_dir / name / "judge.jsonl")
+        if judged:
+            (
+                results[name]["all"]["judge_answers"],
+                results[name]["all"]["judge_faithfulness_mean"],
+            ) = judged
     settings.eval_out_dir.mkdir(parents=True, exist_ok=True)
     (settings.eval_out_dir / "report.json").write_text(
         json.dumps({"dataset": str(folder), "results": results, "rows": rows}, indent=2)
     )
     (settings.eval_out_dir / "report.md").write_text(_markdown(folder, results, len(examples)))
+    report_md = settings.eval_out_dir / "report.md"
+    flat = write_metrics_file(Path(settings.eval_metrics_file), results)
+    emit_gauges(results)
+    mlflow_runs = log_eval_runs(
+        settings, results, folder, systems_meta(settings, outputs), report_md
+    )
     headline = {n: r["all"]["top_outcome_ok"]["rate"] for n, r in results.items()}
     return {
         "systems": list(outputs),
         "examples": len(examples),
         "top_outcome_ok": headline,
-        "report": str(settings.eval_out_dir / "report.md"),
+        "metrics_file": str(settings.eval_metrics_file),
+        "mlflow_runs": len(mlflow_runs),
+        "report": str(report_md),
+        "metrics": len(flat),
     }
+
+
+def write_metrics_file(path: Path, results: dict) -> dict[str, float]:
+    """Flat numbers for `dvc metrics show/diff` (git-tracked, so every commit has its scores)."""
+    flat = {
+        f"{system}.{k}": v for system, scopes in results.items() for k, v in flatten(scopes).items()
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(flat, indent=1, sort_keys=True) + "\n")
+    return flat
+
+
+def emit_gauges(results: dict) -> None:
+    """Latest scores as OpenTelemetry gauges (Prometheus reads them via the Collector)."""
+    for system, scopes in results.items():
+        for scope, summary in scopes.items():
+            for metric, value in summary.items():
+                attrs = {"system": system, "scope": scope, "metric": metric}
+                if isinstance(value, dict) and value.get("rate") is not None:
+                    m.eval_quality.set(float(value["rate"]), attrs)
+                elif isinstance(value, int | float) and not isinstance(value, bool):
+                    (m.eval_quality if metric.endswith("_rate") else m.eval_count).set(
+                        float(value), attrs
+                    )
+
+
+def systems_meta(settings, outputs: dict) -> dict[str, dict]:
+    """Backend, base model and adapter of each system, from eval/systems.yaml."""
+    defined = yaml.safe_load(settings.eval_systems_file.read_text())["systems"]
+    meta = {}
+    for name in outputs:
+        entry = defined.get(name, {})
+        model = next(iter(read_done(settings.eval_out_dir / name / "outputs.jsonl").values()), {})
+        meta[name] = {**entry, "model": model.get("model", "")}
+    return meta
 
 
 def _pct(cell: dict) -> str:

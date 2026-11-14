@@ -68,7 +68,7 @@ services:
     command: >
       mlflow server --host 0.0.0.0 --port 5000
       --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-cles_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/mlflow
-      --default-artifact-root /mlflow/artifacts
+      --serve-artifacts --artifacts-destination /mlflow/artifacts
 
   # Telemetry stack: docker compose --profile observability up -d
   otel-collector:
@@ -88,10 +88,15 @@ services:
     profiles: ["observability"]
     image: arizephoenix/phoenix:version-20.27.0
     container_name: cles_phoenix
+    # Elastic License 2.0: internal use only, never expose this UI to third parties (ADR 0007).
+    # Pinned below v21: v21 turns authentication on by default in Docker; set PHOENIX_ENABLE_AUTH
+    # explicitly before upgrading.
     environment:
       PHOENIX_WORKING_DIR: /mnt/data
+      PHOENIX_ALLOW_EXTERNAL_RESOURCES: "false"   # no price-table or update fetches from the internet
+      PHOENIX_DEFAULT_RETENTION_POLICY_DAYS: "30"  # keep traces 30 days (default: forever)
     ports:
-      - "6006:6006"   # UI
+      - "127.0.0.1:6006:6006"   # UI, this machine only
     volumes:
       - phoenix_data:/mnt/data
 
@@ -101,6 +106,7 @@ services:
     container_name: cles_prometheus
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9090:9090"
     depends_on:

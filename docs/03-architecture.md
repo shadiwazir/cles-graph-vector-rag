@@ -157,6 +157,33 @@ flowchart LR
 
 Start: set `GRAFANA_PASSWORD` in `.env`, then `docker compose --env-file .env -f infra/docker-compose.yml --profile observability up -d`; set `TELEMETRY_ENABLED=true`. Metrics: `cles_advise_duration_milliseconds`, `cles_answers_total{evidence}`, `cles_citations_total{result}`, `cles_llm_tokens_total{direction}`, `cles_stage_runs_total{stage,status}`. Spans carry counts and timings; question text is redacted unless `TELEMETRY_CAPTURE_CONTENT=full`.
 
+## Tracking and observability in every run (ADR 0019) [ob.3]
+
+```mermaid
+flowchart TB
+    subgraph run[Every stage and evaluation]
+        ST[stage_main] --> TR[tracking.py]
+        EV[eval_score, drift_check, judge_eval]
+    end
+    TR -->|run per stage, tags: git, DVC hashes| ML[(MLflow :5000<br/>cles-pipeline, cles-eval, cles-sft, registry)]
+    EV -->|run per system| ML
+    ST -->|spans and stage values| C[OTel Collector]
+    EV -->|quality gauges, drift violations| C
+    C --> PH[Phoenix :6006]
+    C --> PR[Prometheus :9090<br/>alert rules]
+    PR --> GR[Grafana :3000<br/>CLES overview, CLES model quality]
+    GPU[GPU machine<br/>MLflow SQLite file] -->|cles.mlflow_import| ML
+    PIPE[scripts/pipeline.sh] -->|dvc add and push after each data step| DVC[(DVC remote)]
+    EV -->|metrics/eval.json| GIT[git: dvc metrics diff]
+    API[/advise, /feedback/] --> AUD[(request_audit<br/>environment, feedback)]
+    AUD --> EV
+```
+
+- **MLflow experiments:** `cles-pipeline` (one run per stage run), `cles-eval` (one run per evaluated system), `cles-sft` (training, imported from GPU machines), model registry `cles-advisor`.
+- **Evaluation signals:** `cles_eval_quality`, `cles_eval_count`, `cles_drift_violations`, `cles_stage_value` (Prometheus). Dashboards: `cles-overview` (runtime), `cles-quality` (model quality, progress per evaluation, pipeline cost).
+- **Alerts:** `infra/observability/alerts.yml`, tested with `scripts/pipeline.sh alerts-test`. Thresholds are placeholders (48 evaluation examples).
+- **Drift:** `drift_check` compares `metrics/eval.json` with `eval/baseline.json` and live audit rows with the evaluation reference (`eval/thresholds.yaml`).
+
 ## Evaluation (Phase 3)
 
 `cles run evaluate` runs `eval/retrieval_dev.yaml` (15 hand-written questions, one expected decision each) and writes `artifacts/eval/<run_id>.json` with recall@1/3/5 and MRR. `python -m cles.evaluation.run --with-generation` also calls the generator and reports citation pass rate, weak-evidence share and latency (paid, public or synthetic questions only). With 15 distinct decisions the retrieval numbers are a plumbing check, not a quality measure.

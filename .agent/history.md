@@ -188,3 +188,15 @@
 - Done: pod restarted by the user (same host, new port); pushed code; generated base and fine-tuned answers on 48 held-out examples (batch 12), copied back, scored all three systems with OpenAI. Results in docs/05 and refs ml.7. Pod left running at the user's request to stop it.
 - Findings: fine-tune wins on schema, stage and citation grounding; no gain on outcome prediction; overconfident (9 wrong "high" top routes).
 - Next: user stops the pod; commit proposal (evaluation + conversation page + tests); decide next (second-round experiments, live serving test).
+
+## 2026-11-14 Results explorer
+- Done: user committed the evaluation commit and stopped the pod. Built the results explorer (explorer.py, explorer.html, tests, pipeline explore step, README, docs 05/07, refs ml.7). eval_score stores per-citation checks. Wrote the MLflow and observability standpoint summary for the user (in chat). Server stopped after testing.
+- Files affected: src/cles/evaluation/{explorer.py,score.py,static/explorer.html}, tests/test_explorer.py, scripts/pipeline.sh, README.md, docs/05, docs/07, refs.
+- Next: user explores the results; second round (retrieval diversity cap, calibration-aware targets, more data) tracked as separate MLflow experiments; observability stack later.
+
+## 2026-11-14 Tools in every run (MLflow, DVC, observability) and Phoenix licence
+- Done: user's Phoenix licence research (PDF) recorded (ADR 0007 update, INSTRUCTIONS risk and concern rows, compose hardening, ob.2). User's principle saved (auto-memory feedback-tools-in-every-change). Built ADR 0019 scope: per-stage and per-system MLflow runs, mlflow_import (3 training runs imported, adapter registered as cles-advisor v1), OTel gauges, Grafana dashboard cles-quality, Prometheus alerts with promtool tests, drift_check, Flyway V4 (audit environment), POST /feedback, export_extractions, DVC tracking of exports, eval outputs, adapters, dvc.yaml metrics, pipeline steps (infra full stack, snapshot, drift, judge, alerts-test, mlflow-import), judge + calibration + labels in the explorer (blind mode), without-retrieval baseline definition, docs 03/05/07, README, refs ob.2, ob.3, ml.7. 168 tests pass, ruff clean. Paid: judge about $1.8 including one wasted attempt.
+- Files affected: many (see git status): src/cles/{tracking,lineage,mlflow_import}.py, src/cles/evaluation/*, src/cles/extraction/export.py, src/cles/stage.py, src/cles/inference/{app,advisor}.py, infra/*, scripts/pipeline.sh, eval/*, domain_packs/legal_ca_on/judge_*, dvc.yaml, metrics/eval.json, tests, docs, memory.
+- Not done (needs the user or a GPU): lawyer labels and judge calibration, acceptance thresholds, fine-tuned-without-retrieval baseline (GPU), alert receiver, DagsHub/cloud DVC decision, retrieval benchmark for the 93 new decisions, GPU/DB exporters.
+- Next: user commit; user explores results and labels answers (blind mode); decisions on second-round experiments.
+

@@ -13,6 +13,7 @@ exporters:
     endpoint: http://phoenix:6006
   prometheus:
     endpoint: 0.0.0.0:8889
+    metric_expiration: 60m   # batch stages push once and exit: keep their last values visible
 
 service:
   pipelines:

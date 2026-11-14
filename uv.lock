@@ -637,6 +637,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "jsonschema" },
+    { name = "mlflow" },
     { name = "neo4j" },
     { name = "openai" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -665,7 +666,6 @@ dev = [
 train = [
     { name = "accelerate" },
     { name = "datasets" },
-    { name = "mlflow" },
     { name = "peft" },
     { name = "trl" },
 ]
@@ -674,6 +674,7 @@ train = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.162.5" },
     { name = "jsonschema", specifier = ">=4.22" },
+    { name = "mlflow", specifier = ">=3.18.0" },
     { name = "neo4j", specifier = ">=6.4.1" },
     { name = "openai", specifier = ">=3.49.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.45.2" },
@@ -699,7 +700,6 @@ dev = [
 train = [
     { name = "accelerate", specifier = ">=1.15.0" },
     { name = "datasets", specifier = ">=5.2.0" },
-    { name = "mlflow", specifier = ">=3.18.0" },
     { name = "peft", specifier = ">=0.21.2" },
     { name = "trl", specifier = ">=1.17.1" },
 ]

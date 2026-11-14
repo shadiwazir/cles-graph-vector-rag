@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from cles import tracking
 from cles.config import get_settings
 from cles.observability import metrics as m
 from cles.observability.logging import setup_logging
@@ -55,10 +56,22 @@ def stage_main(
     except Exception as exc:
         log.exception("stage %s failed", name)
         _print_summary(name, ctx, "failed", {"error": str(exc)})
+        _track(name, ctx, {"status": "failed", "error": str(exc)}, started)
         _finish(name, status, started)
         sys.exit(1)
     _print_summary(name, ctx, "ok", result)
+    _track(name, ctx, {"status": "ok", **result}, started)
     _finish(name, status, started)
+
+
+def _track(name: str, ctx: StageContext, summary: dict, started: float) -> None:
+    """Record the run in MLflow (not for dry runs, which only estimate)."""
+    if not ctx.dry_run:
+        for key, value in tracking.numeric_metrics(summary).items():
+            m.stage_value.set(value, {"stage": name, "metric": key})
+        tracking.log_stage_run(
+            get_settings(), name, ctx.run_id, summary, time.monotonic() - started, ctx.limit
+        )
 
 
 def _finish(name: str, status: str, started: float) -> None:

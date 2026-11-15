@@ -6,6 +6,9 @@
 #   scripts/gpu_setup.sh run <name> <config>      run on the GPU MACHINE: train_sft in the background
 #   scripts/gpu_setup.sh eval <system>            run on the GPU MACHINE: eval_generate with one
 #                                                 system of eval/systems.yaml (run name eval-<system>)
+#   scripts/gpu_setup.sh serve [adapter_dir]      run on the GPU MACHINE: install vLLM (own venv) and serve
+#                                                 the base model plus the adapter as model "cles"
+#   scripts/gpu_setup.sh serve-wait               run on the GPU MACHINE: block until "cles" answers
 #   scripts/gpu_setup.sh wait <name>              run on the GPU MACHINE: block until the run ends
 #
 # `run` writes /workspace/runs/<name>.log and, when the process ends, /workspace/runs/<name>.exit
@@ -82,13 +85,40 @@ ENV
       echo \\$? > /workspace/runs/eval-$SYSTEM.exit" < /dev/null > /dev/null 2>&1 &
     echo "started eval-$SYSTEM (log /workspace/runs/eval-$SYSTEM.log, marker eval-$SYSTEM.exit)"
     ;;
+  serve)
+    ADAPTER="${2:-artifacts/runs/3a752888/adapter}"
+    mkdir -p /workspace/runs
+    rm -f /workspace/runs/serve.exit
+    # vLLM pins its own torch, so it gets its own venv next to the training one. Everything runs in
+    # the background (the install takes minutes); the server listens on the pod's localhost only,
+    # reach it through an SSH tunnel.
+    setsid nohup bash -c ". /workspace/env.sh \\
+      && { [ -d /workspace/venv-vllm ] || uv venv --python python3 /workspace/venv-vllm; } \\
+      && . /workspace/venv-vllm/bin/activate \\
+      && { python -c 'import vllm' 2>/dev/null || uv pip install 'vllm==0.33.0'; } \\
+      && vllm serve Qwen/Qwen3-8B --enable-lora --lora-modules cles=$REMOTE_DIR/$ADAPTER \\
+           --max-lora-rank 64 --max-model-len 12288 --dtype bfloat16 \\
+           --gpu-memory-utilization 0.90 --host 127.0.0.1 --port 8000 \\
+      ; echo \\$? > /workspace/runs/serve.exit" < /dev/null > /workspace/runs/serve.log 2>&1 &
+    echo "started serve (log /workspace/runs/serve.log, marker /workspace/runs/serve.exit)"
+    ;;
+  serve-wait)
+    until curl -sf http://127.0.0.1:8000/v1/models 2>/dev/null | grep -q '"cles"'; do
+      if [[ -f /workspace/runs/serve.exit ]]; then
+        echo "server exited with code $(cat /workspace/runs/serve.exit); see /workspace/runs/serve.log" >&2
+        exit 1
+      fi
+      sleep 10
+    done
+    echo "model cles is served on the pod at http://127.0.0.1:8000/v1"
+    ;;
   wait)
     NAME="${2:?usage: gpu_setup.sh wait <name>}"
     until [[ -f "/workspace/runs/$NAME.exit" ]]; do sleep 10; done
     echo "run $NAME exit code: $(cat "/workspace/runs/$NAME.exit")"
     ;;
   *)
-    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac

@@ -1,0 +1,23 @@
+# Acceptance criteria for a model version (INSTRUCTIONS section 14), evaluated by `accept_check`.
+# Agreed 2026-11-14. "Accepted" is PROVISIONAL in this PoC: lawyer review (correctness,
+# usefulness) is not performed, and 48 held-out examples are too few for outcome accuracy.
+#
+# tier: blocking = must pass; tracked = reported and trended, does not block.
+# A criterion can become blocking once enough examples exist (blocking_from_n counts the examples
+# the metric applies to, for example the 24 late-stage examples for outcome accuracy).
+# Thresholds are set by reasoning, not tuned to a model's result. Tighten them as data grows.
+system: finetuned          # the system being judged (a key of eval/systems.yaml)
+criteria:
+  # --- behaviours that are measurable now (blocking) ---
+  - {id: schema_valid,     tier: blocking, metric: valid_schema,              op: ">=", value: 0.98}
+  - {id: stage_identified, tier: blocking, metric: stage_ok,                  op: ">=", value: 0.90}
+  - {id: no_foreign_cites, tier: blocking, metric: citations_outside_context, op: "==", value: 0}
+  - {id: citations_grounded, tier: blocking, metric: citation_failure_rate,   op: "<=", value: 0.05}
+  # When the model rates its top route "high", it should be right at least two times in three.
+  - {id: high_is_reliable, tier: blocking, metric: high_precision,            op: ">=", value: 0.67, min_n: 5}
+  # --- outcome accuracy (tracked in the PoC; the interval rule is the real behaviour) ---
+  - {id: outcome_vs_majority, tier: tracked, metric: top_outcome_ok, op: ">=", reference: majority_baseline}
+  - {id: outcome_interval_vs_majority, tier: tracked, blocking_from_n: 100, mode: wilson_lower,
+     metric: top_outcome_ok, op: ">=", reference: majority_baseline}
+  - {id: outcome_vs_base, tier: tracked, metric: top_outcome_ok, op: ">=", reference_system: base, margin: -0.10}
+  - {id: likelihood_within_caps, tier: tracked, metric: likelihood_over_cap, op: "<=", value: 3}

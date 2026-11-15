@@ -204,3 +204,12 @@
 - Done: built the web console (ADR 0020, refs pr.2): one app and port with the product home page (ask), results explorer, platform tools with live health, about; compose changes to allow embedding; pipeline `console`; tests. User said they are not a lawyer (labels cannot be legal opinions), DagsHub not needed (local DVC), acceptance thresholds to be discussed later, next GPU run decided after the console.
 - Files affected: src/cles/console/*, src/cles/inference/app.py, src/cles/evaluation/explorer.py, src/cles/config.py, infra/docker-compose.yml, scripts/pipeline.sh, tests/test_console.py, docs/adr/0020, README.md, docs/07, refs.
 - Next: user commit (two staged batches), reviews the console, decides on the GPU run (serve the fine-tuned model with vLLM behind an SSH tunnel so the Ask page uses it), thresholds discussion.
+
+## 2026-11-14 Commits and tags
+- Done: user committed 022ee09 (tools in every run) and 9fd428c (web console) after the staging split; tags v0.6.0-poc-evaluation-tooling (022ee09) and v0.7.0-poc-console (9fd428c) applied with the user's approval. Nothing pushed.
+- Next: user tries the console; decision on the next GPU run (serve the fine-tuned model for the Ask page); acceptance thresholds discussion; optional: show retrieved passages in the explorer.
+
+## 2026-11-14 Acceptance criteria and serving preparation
+- Done: acceptance thresholds discussed and agreed (ADR 0021, docs/05, refs ml.8); implemented accept_check, eval/acceptance.yaml, console and Grafana display, pipeline accept step, command-line env precedence in pipeline.sh, gpu_setup.sh serve and serve-wait (untested on a GPU). Verdict of the latest check: rejected (provisional), one blocking criterion (high_is_reliable).
+- Files affected: eval/acceptance.yaml, src/cles/evaluation/{accept,scoring}.py, src/cles/console/*, src/cles/observability/metrics.py, src/cles/{config,cli}.py, infra/observability/grafana/dashboards/cles-quality.json, scripts/{pipeline,gpu_setup}.sh, tests/test_acceptance.py, docs/05, docs/06, docs/adr/0021, refs.
+- Next: user starts the pod (same volume, same region); I check disk space, serve with vLLM, tunnel, run the console against it; compare a few answers with the evaluation outputs; stop the pod.

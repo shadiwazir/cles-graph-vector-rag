@@ -178,7 +178,18 @@ def info(settings: Settings) -> dict:
         },
         "corpus": corpus,
         "quality": _quality(settings),
+        "acceptance": _acceptance(settings),
     }
+
+
+def _acceptance(settings: Settings) -> dict | None:
+    """Verdict of the latest acceptance check (provisional), or None when there is none."""
+    path = settings.eval_out_dir / "acceptance.json"
+    if not path.is_file():
+        return None
+    d = json.loads(path.read_text())
+    keys = ("system", "status", "blocking_failed_ids", "tracked_failed_ids", "provisional")
+    return {k: d.get(k) for k in keys}
 
 
 def _quality(settings: Settings) -> dict | None:

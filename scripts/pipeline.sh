@@ -14,6 +14,8 @@
 #   eval        eval_generate with the OpenAI baseline (PAID), then eval_score
 #   eval-score  eval_score only: score every system in artifacts/eval/*/outputs.jsonl
 #   judge       judge_eval (PAID, public decisions only), eval_score, judge_calibrate
+#   accept      accept_check: acceptance criteria (eval/acceptance.yaml) for the model version,
+#               provisional (exit 6 when a blocking criterion fails)
 #   drift       drift_check: latest evaluation vs eval/baseline.json, live traffic vs reference
 #               (exit 5 when there are violations)
 #   snapshot    dvc add + dvc push of the exports, datasets, evaluation outputs and adapters
@@ -41,14 +43,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# A value given on the command line must win over .env (used by `console` below).
-CALLER_ALLOW_EXTERNAL="${ALLOW_EXTERNAL_GENERATOR:-}"
-
+# Variables given on the command line win over .env (for example LLM_BASE_URL or
+# ALLOW_EXTERNAL_GENERATOR for one run): remember them, load .env, then put them back.
+declare -A CALLER_ENV
 if [[ -f .env ]]; then
+  while read -r key; do
+    [[ -n "${!key+x}" ]] && CALLER_ENV[$key]="${!key}"
+  done < <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*' .env || true)
   set -a
   # shellcheck disable=SC1091
   . ./.env
   set +a
+  for key in "${!CALLER_ENV[@]}"; do export "$key=${CALLER_ENV[$key]}"; done
 fi
 
 # MLflow, DVC and telemetry are part of every step: telemetry is switched on whenever the
@@ -185,6 +191,8 @@ step_eval() {
 step_eval_score() {
   run_stages eval_score
   snapshot artifacts/eval
+  run_stages accept_check  # informational here: `accept` is the gate
+  tail -1 "$LOG_DIR/accept_check.log" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("acceptance (provisional):", d.get("status"), d.get("blocking_failed_ids"))' >&2
   step_drift
 }
 
@@ -194,6 +202,14 @@ step_judge() {
   ALLOW_EXTERNAL_GENERATOR=true run_stages judge_eval
   run_stages eval_score judge_calibrate
   snapshot artifacts/eval
+}
+
+step_accept() {
+  run_stages accept_check
+  local status
+  status="$(tail -1 "$LOG_DIR/accept_check.log" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("blocking_failed_ids"))')"
+  say "acceptance (provisional): $status"
+  [[ "$status" == accepted_provisional* ]] || die "model version not accepted: $status" 6
 }
 
 step_drift() {
@@ -217,8 +233,6 @@ step_mlflow_import() {
 }
 
 step_console() {
-  # Case text goes to a third party only when the caller says so on the command line.
-  [[ -n "$CALLER_ALLOW_EXTERNAL" ]] && export ALLOW_EXTERNAL_GENERATOR="$CALLER_ALLOW_EXTERNAL"
   say "web console: http://localhost:${CONSOLE_PORT:-8000}/ (Ctrl+C to stop)"
   exec uv run uvicorn cles.console.app:create_app --factory --port "${CONSOLE_PORT:-8000}"
 }
@@ -260,6 +274,7 @@ case "$STEP" in
   eval) step_eval ;;
   eval-score) step_eval_score ;;
   judge) step_judge ;;
+  accept) step_accept ;;
   drift) step_drift ;;
   snapshot) step_snapshot ;;
   alerts-test) step_alerts_test ;;
@@ -269,6 +284,6 @@ case "$STEP" in
   all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
   status) step_status ;;
   reset) step_reset ;;
-  *) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 say "step $STEP done (logs: $LOG_DIR)"

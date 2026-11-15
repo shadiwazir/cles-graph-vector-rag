@@ -52,6 +52,16 @@ async function loadInfo() {
     el("p", { class: "small" }, m.external
       ? "An external service writes the answers. Use public or synthetic cases only."
       : "Runs on infrastructure we control. Case text stays with us."));
+  const acc = INFO.acceptance;
+  if (acc) {
+    const names = (ids) => ids.map((i) => i.replaceAll("_", " ")).join(", ");
+    $("modelInfo").append(
+      el("div", { class: "stat" }, `Acceptance of the ${acc.system} model (provisional)`,
+        tag(acc.status.replaceAll("_", " "), acc.status === "accepted_provisional" ? "ok" : "bad")),
+      el("p", { class: "small" }, acc.blocking_failed_ids.length
+        ? "Blocking criteria not met: " + names(acc.blocking_failed_ids) + "."
+        : "All blocking criteria are met. No lawyer review has been performed."));
+  }
   $("corpusInfo").replaceChildren(
     ...(c.decisions
       ? [el("div", { class: "stat" }, "Decisions", el("b", {}, c.decisions)),

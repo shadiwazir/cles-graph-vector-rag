@@ -25,3 +25,4 @@ decision gets a new ADR that supersedes the old one.
 | 0018 | Conversation support: earlier turns folded into the case text |
 | 0019 | MLflow, DVC and observability are part of every run |
 | 0020 | One web console as the landing page of the system |
+| 0021 | Acceptance criteria as a versioned file and a stage |

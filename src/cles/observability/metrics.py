@@ -29,3 +29,6 @@ eval_count = _meter.create_gauge(
 drift_violations = _meter.create_gauge(
     "cles.drift.violations", description="Checks that failed in the last drift check"
 )
+acceptance = _meter.create_gauge(
+    "cles.acceptance", description="Acceptance criteria of the last check: 1 passed, 0 failed"
+)

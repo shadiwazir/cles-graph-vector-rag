@@ -87,6 +87,26 @@ Reference: always predicting "dismissed" is right for 42% (10 of 24).
 - It is overconfident: 9 wrong top routes rated "high". Cause (likely): in the training targets the first route always equals the real outcome, so the model learns to lead with a confident route it cannot know. Production caps (`cap_likelihood`) clamp by evidence and stage, but not all of these.
 - Not measured: whether the advice is useful to a lawyer (needs lawyer review), and any effect of the 12-decision evaluation set being from one narrow time window.
 
+## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
+
+Specified in `eval/acceptance.yaml`, checked by `scripts/pipeline.sh accept` (`accept_check`). Acceptance is **provisional**: no lawyer review is performed in this PoC, and 48 held-out examples are too few for outcome accuracy. Thresholds are set by reasoning, not tuned to a result, and tighten as data grows.
+
+| Criterion | Tier | Rule | Latest (fine-tuned) |
+|-----------|------|------|---------------------|
+| Matches the advice schema | blocking | at least 98% | 100% pass |
+| Stage identified | blocking | at least 90% | 100% pass |
+| Citations outside the supplied context | blocking | 0 | 0 pass |
+| Citations failing verification (before the verifier removes them) | blocking | at most 5% | 4.1% pass |
+| A top route rated "high" is reliable | blocking | right at least 2 times in 3 (needs 5+ cases) | 8 of 17 = 47% **fail** |
+| Outcome at least the majority class | tracked | point estimate | 46% vs 42% pass (noise) |
+| Outcome, lower bound of the 95% interval, at least the majority class | tracked, blocking from 100 late-stage examples | interval rule | 30% fail |
+| Outcome within 10 points of base plus retrieval | tracked | non-inferiority | 46% vs 62% fail |
+| Likelihoods above the evidence cap | tracked | at most 3 | 6 fail |
+
+Verdict of the latest check: **rejected (provisional)**, one blocking criterion failed (`high_is_reliable`). The adapter in the MLflow registry has the alias `candidate`; it gets `accepted` only when every blocking criterion passes. The console shows the verdict, `cles_acceptance` gauges feed Grafana, and `eval-score` prints it (the `accept` step exits 6 on failure).
+
+Policy: a hard gate that the model fails is the honest result. Gates are not relaxed to make a model pass; they are tightened on a schedule as the evaluation set grows (the outcome rule becomes blocking at 100 late-stage examples).
+
 ## Leakage tests (Phase 4)
 
 - no disposition text or outcome label in any example input (L1)

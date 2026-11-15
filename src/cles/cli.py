@@ -27,6 +27,7 @@ STAGES: dict[str, str] = {
     "eval_score": "cles.evaluation.score",
     "judge_eval": "cles.evaluation.judge",
     "judge_calibrate": "cles.evaluation.calibrate",
+    "accept_check": "cles.evaluation.accept",
     "drift_check": "cles.evaluation.drift",
 }
 

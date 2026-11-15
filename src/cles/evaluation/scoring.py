@@ -39,6 +39,7 @@ def score_answer(
         "schema_valid": advice is not None and not schema_errors,
         "stage_ok": isinstance(advice, dict) and advice.get("stage") == example["stage"],
         "top_outcome": top_outcome,
+        "top_likelihood": top.get("likelihood") if late else None,
         "top_outcome_ok": (top_outcome == truth) if late else None,
         "any_outcome_ok": any(r.get("expected_outcome") == truth for r in routes),
         "remedies_ok": (set(top.get("expected_remedies") or []) == truth_remedies)
@@ -98,6 +99,10 @@ def _summary(rows: list[dict]) -> dict:
             ]
         ),
         "high_and_wrong": sum(bool(r["top_high_and_wrong"]) for r in rows),
+        # calibration: when the top route is rated "high", how often is it the real outcome?
+        "high_precision": _rate(
+            [r["top_outcome_ok"] if r.get("top_likelihood") == "high" else None for r in rows]
+        ),
         "citations_claimed": claimed,
         "citations_verified": verified_total - failed,
         "citations_failed": failed,

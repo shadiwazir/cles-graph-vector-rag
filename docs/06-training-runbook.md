@@ -37,6 +37,16 @@ Pod: one L40S 48 GB on demand (about $1.09 per hour), template PyTorch 2.8.0 / C
 5. Every ssh command must source `/workspace/env.sh` (non-interactive ssh does not read `.bashrc`); otherwise the model downloads to the container disk, which is erased on stop. `gpu_setup.sh run` does this.
 6. Stop the pod after each step; delete the volume when the PoC is finished (it bills about $4.20 per month even when the pod is stopped).
 
+## Serving the adapter for the console (vLLM behind an SSH tunnel) [ml.8]
+
+Needs a GPU pod in the same region as the volume (the adapter is on the volume). A 24 GB card is enough for one user at 12k tokens; 48 GB gives headroom. The 16-bit base (about 16 GB) is downloaded once to the volume; vLLM lives in its own venv (`/workspace/venv-vllm`) because it pins its own torch. Not yet exercised on a GPU: expect first-run snags.
+
+1. Pod: `scripts/gpu_setup.sh push root@<ip> <port>` if the code changed, then `scripts/gpu_setup.sh serve` and `scripts/gpu_setup.sh serve-wait` (blocks until the model `cles` answers; vLLM listens on the pod's localhost only).
+2. Laptop, tunnel: `ssh -N -L 8001:localhost:8000 -p <port> -i ~/.ssh/id_ed25519 root@<ip>`.
+3. Laptop, console: `LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles OPENAI_API_KEY=local ADAPTER_VERSION="cles-advisor v1 (candidate)" LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}' scripts/pipeline.sh console` (command-line values win over `.env`; `localhost` passes the confidentiality guard, so no `ALLOW_EXTERNAL_GENERATOR`).
+4. The adapter was trained on the 4-bit base and the evaluation used the 4-bit load; vLLM serves the 16-bit base. Compare a few answers with the evaluation outputs before trusting the console.
+5. Stop the pod when done; the volume keeps the model cache and the venv.
+
 ## Budget estimate for the real corpus (10,000 decisions)
 
 Scaled linearly from the 15-decision sample, at unverified OpenAI prices and an assumed GPU throughput. All figures are rough; the pilot step replaces the throughput assumption.

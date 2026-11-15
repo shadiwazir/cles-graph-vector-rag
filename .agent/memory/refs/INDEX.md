@@ -40,6 +40,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [rt.4] | Live conversational interface | ADR 0018 |
 | [ob.3] | MLflow, DVC, observability in every run | ADR 0019, docs/03 |
 | [pr.2] | Web console as the landing page | ADR 0020 |
+| [ml.8] | Acceptance criteria; serving for the console | ADR 0021, docs/05, docs/06 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |
 | [pl.2] | Run playbook and pipeline script | docs/07 |
 | [pr.1] | Two goals; PoC on about 100 decisions | docs/06, docs/04 |

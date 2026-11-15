@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     eval_systems_file: Path = Path("eval/systems.yaml")
     eval_out_dir: Path = Path("artifacts/eval")
     eval_metrics_file: Path = Path("metrics/eval.json")  # git-tracked, for `dvc metrics`
+    acceptance_file: Path = Path("eval/acceptance.yaml")  # model acceptance criteria
     drift_thresholds_file: Path = Path("eval/thresholds.yaml")
     drift_baseline_file: Path = Path("eval/baseline.json")  # git-tracked
     drift_update_baseline: bool = False  # make the latest evaluation the new baseline

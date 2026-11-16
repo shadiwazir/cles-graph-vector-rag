@@ -9,3 +9,4 @@
 - Doc style (user, 2026-10-22): docs/* and code comments concise, dev-to-dev; AI-side detail in .agent/memory/refs/ linked by [area.n] tags (see refs/INDEX.md). NOT for INSTRUCTIONS.md/AGENTS.md (leave as is). ADRs keep full detail.
 
 - 2026-11-12: Scope = goal 1 (PoC on ~100 PDFs in data/criminal_and_civil, 93 files); goal 2 (production, 10k+) later. See refs pr.1, pl.2, docs/07, scripts/pipeline.sh.
+- 2026-11-15: Serving of the fine-tuned adapter verified on a RunPod L40S (vLLM 0.33.0, SSH tunnel, console). Volume now 75 GB (was 60 GB, filled by the uv cache; `uv cache clean`). Pod stopped by the user. Next GPU session: run the 48 eval examples against the served 16-bit model (4-bit vs 16-bit check); user tells me when the pod is up. Acceptance verdict still "rejected (provisional)" on high_is_reliable.

@@ -16,3 +16,7 @@ systems:
     base_model: Qwen/Qwen3-8B
     adapter: artifacts/runs/3a752888/adapter
     without_retrieval: true
+  finetuned_served:   # the same adapter served by vLLM in 16 bit (docs/06); run from the laptop through the SSH tunnel
+    backend: served  # LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}'
+    base_model: Qwen/Qwen3-8B
+    adapter: artifacts/runs/3a752888/adapter

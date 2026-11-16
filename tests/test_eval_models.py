@@ -112,3 +112,46 @@ def test_strip_context_removes_passages_and_graph_facts():
         prompt_of(example, True)[1]["content"] == stripped
         and prompt_of(example)[1]["content"] == user
     )
+
+
+def test_served_backend_uses_greedy_free_text_and_records_failures(monkeypatch):
+    """The served backend must decode like the hf backend: temperature 0, no JSON mode, same
+    token limit; a failing request becomes an empty (invalid) answer, not a crash."""
+    from types import SimpleNamespace
+
+    import openai
+
+    from cles.config import Settings
+    from cles.evaluation import generate
+
+    calls = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            if "boom" in kwargs["messages"][1]["content"]:
+                raise RuntimeError("server down")
+            message = SimpleNamespace(content='{"ok": 1}')
+            usage = SimpleNamespace(prompt_tokens=7, completion_tokens=3)
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+
+    monkeypatch.setattr(openai, "OpenAI", FakeClient)
+    settings = Settings(
+        llm_base_url="http://localhost:8001/v1", llm_model="cles", eval_max_new_tokens=50
+    )
+
+    def example(i, text):
+        msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": text}]
+        return {"example_id": i, "messages": msgs}
+
+    rows = list(
+        generate._served_generator(settings, {})([example("a", "hi"), example("b", "boom")])
+    )
+    by_id = {r["example_id"]: r for r in rows}
+    assert by_id["a"]["input_tokens"] == 7 and by_id["a"]["output_tokens"] == 3
+    assert by_id["b"]["input_tokens"] == 0
+    ok = next(c for c in calls if "boom" not in c["messages"][1]["content"])
+    assert ok["temperature"] == 0 and ok["max_tokens"] == 50 and "response_format" not in ok

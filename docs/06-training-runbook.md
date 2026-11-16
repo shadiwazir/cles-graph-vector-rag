@@ -39,13 +39,15 @@ Pod: one L40S 48 GB on demand (about $1.09 per hour), template PyTorch 2.8.0 / C
 
 ## Serving the adapter for the console (vLLM behind an SSH tunnel) [ml.8]
 
-Needs a GPU pod in the same region as the volume (the adapter is on the volume). A 24 GB card is enough for one user at 12k tokens; 48 GB gives headroom. The 16-bit base (about 16 GB) is downloaded once to the volume; vLLM lives in its own venv (`/workspace/venv-vllm`) because it pins its own torch. Not yet exercised on a GPU: expect first-run snags.
+Needs a GPU pod in the same region as the volume (the adapter is on the volume). A 24 GB card is enough for one user at 12k tokens; 48 GB gives headroom. The 16-bit base (about 16 GB) is downloaded once to the volume; vLLM lives in its own venv (`/workspace/venv-vllm`) because it pins its own torch. Verified on 2026-11-15 on an L40S (vLLM 0.33.0): the model `cles` answered and the console returned a valid answer with all citations verified. Disk: the 16-bit base (16 GB), `/workspace/venv` (12 GB) and `/workspace/venv-vllm` (17 GB) plus the 4-bit copy (7 GB) fill a 60 GB volume; the uv cache grew to 25 GB and caused "Disk quota exceeded". The volume is now 75 GB; run `uv cache clean` on the pod if it fills again.
 
 1. Pod: `scripts/gpu_setup.sh push root@<ip> <port>` if the code changed, then `scripts/gpu_setup.sh serve` and `scripts/gpu_setup.sh serve-wait` (blocks until the model `cles` answers; vLLM listens on the pod's localhost only).
 2. Laptop, tunnel: `ssh -N -L 8001:localhost:8000 -p <port> -i ~/.ssh/id_ed25519 root@<ip>`.
 3. Laptop, console: `LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles OPENAI_API_KEY=local ADAPTER_VERSION="cles-advisor v1 (candidate)" LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}' scripts/pipeline.sh console` (command-line values win over `.env`; `localhost` passes the confidentiality guard, so no `ALLOW_EXTERNAL_GENERATOR`).
 4. The adapter was trained on the 4-bit base and the evaluation used the 4-bit load; vLLM serves the 16-bit base. Compare a few answers with the evaluation outputs before trusting the console.
-5. Stop the pod when done; the volume keeps the model cache and the venv.
+5. Check 4-bit against 16-bit: with the tunnel open, run the held-out examples through the served model from the laptop, then score them next to the other systems (no paid API, nothing is sent to a third party):
+   `EVAL_SYSTEM=finetuned_served LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}' uv run cles run eval_generate` then `uv run cles run eval_score`. The `served` backend decodes like the `hf` one (temperature 0, no JSON mode, same token limit), so a difference in the scores comes from the 16-bit weights, not from the settings.
+6. Stop the pod when done; the volume keeps the model cache and the venv.
 
 ## Budget estimate for the real corpus (10,000 decisions)
 

@@ -7,6 +7,9 @@ Answers go to artifacts/eval/<system>/outputs.jsonl; examples already answered a
 
 The `openai` backend is paid and sends case text to a third party: public cases only (guard:
 ALLOW_EXTERNAL_GENERATOR). The `hf` backend needs a GPU (Unsloth, same 4-bit load as training).
+The `served` backend calls an OpenAI-compatible server you run (vLLM behind an SSH tunnel, docs/06)
+with the same settings as `hf`: temperature 0, no constrained JSON, the same token limit. It runs
+on the laptop, so the checks (L1-L5 data, scoring) stay local; LLM_BASE_URL and LLM_MODEL select it.
 """
 
 import json
@@ -101,11 +104,11 @@ def run(ctx: StageContext) -> dict:
         return summary
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    generator = (
-        _openai_generator(settings)
-        if system["backend"] == "openai"
-        else _hf_generator(settings, system)
-    )
+    generator = {
+        "openai": lambda: _openai_generator(settings, system),
+        "served": lambda: _served_generator(settings, system),
+        "hf": lambda: _hf_generator(settings, system),
+    }[system["backend"]]()
     cost = 0.0
     with out_path.open("a") as out:
         for row in generator(todo):
@@ -120,7 +123,7 @@ def run(ctx: StageContext) -> dict:
                 )
                 or 0.0
             )
-    if system["backend"] == "openai":
+    if system["backend"] in ("openai", "served"):
         summary["cost_usd"] = cost
     return summary
 
@@ -143,6 +146,46 @@ def _openai_generator(settings: Settings, system: dict):
         with ThreadPoolExecutor(max_workers=settings.llm_concurrency) as pool:
             futures = [pool.submit(one, e) for e in examples]
             for future in as_completed(futures):  # the caller writes rows from this thread
+                yield future.result()
+
+    return generate
+
+
+def _served_generator(settings: Settings, system: dict):
+    """Same decoding as the `hf` backend, through a served model (greedy, free text)."""
+    from openai import OpenAI
+
+    check_generator_allowed(settings)
+    if not settings.llm_model:
+        raise ConfigError("LLM_MODEL is not set (the served model name, for example cles)")
+    client = OpenAI(
+        api_key=settings.openai_api_key or "local",
+        base_url=settings.llm_base_url,
+        timeout=settings.llm_timeout_seconds,
+    )
+
+    def one(e: dict) -> dict:
+        started = time.monotonic()
+        try:
+            reply = client.chat.completions.create(
+                model=settings.llm_model,
+                messages=prompt_of(e, system.get("without_retrieval", False)),
+                temperature=0,
+                max_tokens=settings.eval_max_new_tokens,
+                extra_body=settings.llm_extra_body or None,
+            )
+            usage = reply.usage
+            text = reply.choices[0].message.content or ""
+            tin, tout = (usage.prompt_tokens, usage.completion_tokens) if usage else (0, 0)
+        except Exception as exc:  # recorded as an invalid answer, not a crash
+            log.warning("generation failed for %s: %s", e["example_id"], exc)
+            text, tin, tout = "", 0, 0
+        return _row(e, text, tin, tout, started, settings.llm_model)
+
+    def generate(examples: list[dict]):
+        with ThreadPoolExecutor(max_workers=settings.llm_concurrency) as pool:
+            futures = [pool.submit(one, e) for e in examples]
+            for future in as_completed(futures):
                 yield future.result()
 
     return generate

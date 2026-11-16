@@ -3,7 +3,7 @@
 Advisory copilot for lawyers: hybrid retrieval (pgvector + Neo4j) feeding a fine-tuned SLM.
 See `INSTRUCTIONS.md` (build spec), `AGENTS.md` (agent rules) and `docs/`.
 
-Two goals: (1) a proof of concept to learn from, on about 100 decisions (current); (2) a production-grade product on the full corpus (later). Docs: `docs/04` (plan), `docs/06` (training and costs), `docs/07` (run playbook).
+Two goals: (1) a proof of concept to learn from, on about 100 decisions (current); (2) a production-grade product on the full corpus (later). Docs: `docs/04` (plan), `docs/06` (training and costs), `docs/07` (run playbook), `docs/08` (improvement plan, planned).
 
 ## Quick start
 

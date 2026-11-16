@@ -87,6 +87,24 @@ Reference: always predicting "dismissed" is right for 42% (10 of 24).
 - It is overconfident: 9 wrong top routes rated "high". Cause (likely): in the training targets the first route always equals the real outcome, so the model learns to lead with a confident route it cannot know. Production caps (`cap_likelihood`) clamp by evidence and stage, but not all of these.
 - Not measured: whether the advice is useful to a lawyer (needs lawyer review), and any effect of the 12-decision evaluation set being from one narrow time window.
 
+### 16-bit serving check (2026-11-16)
+
+The adapter was trained and evaluated on the 4-bit base; vLLM serves the 16-bit base. The same 48 prompts went through the served model (`finetuned_served`, backend `served`: temperature 0, no JSON mode, same token limit as the 4-bit run) and were scored with the same code.
+
+| Metric | fine-tuned, 4-bit | fine-tuned, 16-bit served |
+|--------|-------------------|---------------------------|
+| matches the advice schema / stage correct | 100% / 100% | 100% / 100% |
+| citations failing verification | 8 of 258 | 5 of 229 |
+| top route = real outcome (24) | 46% | 50% |
+| any route names the real outcome (48) | 58% | 58% |
+| wrong top routes rated "high" | 9 | 7 |
+| top route rated "high" and right | 47% (8/17) | 50% |
+| likelihood above the evidence cap | 6 | 2 |
+
+- The 4-bit results carry over to the served model: structure is identical and the other differences are within noise for 48 examples (about +-15 points). The weak spot is unchanged: a "high" top route is right about half the time, below the 67% gate.
+- The acceptance check was not rerun for this system (it is defined for `finetuned`); the verdict stays "rejected (provisional)".
+- Run: tunnel open, `EVAL_SYSTEM=finetuned_served LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}' uv run cles run eval_generate`, then `eval_score` (docs/06).
+
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 
 Specified in `eval/acceptance.yaml`, checked by `scripts/pipeline.sh accept` (`accept_check`). Acceptance is **provisional**: no lawyer review is performed in this PoC, and 48 held-out examples are too few for outcome accuracy. Thresholds are set by reasoning, not tuned to a result, and tighten as data grows.

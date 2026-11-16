@@ -22,3 +22,9 @@ early_route_name_patterns:
   - '(?i)\bupheld\b|\bset aside\b'
   - '(?i)\bnew trial (is |was )?ordered'
   - '(?i)dismissed\b'
+
+# Parties that do not identify a case family (used by the cross-split family check).
+family_ignore_party_kinds: [crown]
+family_ignore_name_patterns:
+  - '(?i)his majesty|attorney general|\bthe king\b|\bcrown\b'
+  - '(?i)^(john|jane) doe$'

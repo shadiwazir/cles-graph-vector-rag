@@ -105,6 +105,24 @@ The adapter was trained and evaluated on the 4-bit base; vLLM serves the 16-bit 
 - The acceptance check was not rerun for this system (it is defined for `finetuned`); the verdict stays "rejected (provisional)".
 - Run: tunnel open, `EVAL_SYSTEM=finetuned_served LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}' uv run cles run eval_generate`, then `eval_score` (docs/06).
 
+### Decision-level view and model-free baselines (2026-11-16) [ml.9] (ADR 0022)
+
+The 48 examples are 12 decisions with four stages each; the independent unit is the decision, so rates carry a 95% cluster-bootstrap interval over decisions. Two predictors that need no model are scored the same way: `baseline_prior` (most common training outcome) and `baseline_precedent` (most common outcome among the retrieved context decisions).
+
+| predictor | top route right (24 late-stage) | 95% interval over 12 decisions |
+|-----------|----------------------------------|--------------------------------|
+| base Qwen3-8B | 62% | 46% to 79% |
+| fine-tuned 4-bit | 46% | 25% to 67% |
+| fine-tuned 16-bit served | 50% | 25% to 75% |
+| OpenAI gpt-5.4-mini | 50% | 21% to 75% |
+| baseline_prior | 42% | 17% to 75% |
+| baseline_precedent | 58% | 33% to 83% |
+
+- No system is distinguishable from the precedent vote on outcomes: every interval overlaps. The fine-tune does not beat it (46 to 50% against 58%); the acceptance criterion `outcome_vs_precedent` (tracked) fails.
+- When the retrieved precedents all agree (8 of the 24), the vote is right 5 of 8 (62%). The fine-tuned model's "high" is right 47 to 50% (8 of 17), so "high only if the precedents agree" is a better rule than the model's own rating (to replay, docs/08 step 1).
+- Dataset diagnostics (`check_dataset`, warnings): outcome shift between training (79% dismissed, 93 decisions) and evaluation (42% dismissed, 12 decisions) is 0.37; no case family crosses the split.
+- Tests: `tests/test_eval_statistics.py` (cluster rate and interval, baselines, outcome shift, family candidates).
+
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 
 Specified in `eval/acceptance.yaml`, checked by `scripts/pipeline.sh accept` (`accept_check`). Acceptance is **provisional**: no lawyer review is performed in this PoC, and 48 held-out examples are too few for outcome accuracy. Thresholds are set by reasoning, not tuned to a result, and tighten as data grows.

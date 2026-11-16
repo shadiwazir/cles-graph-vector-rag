@@ -19,5 +19,7 @@ criteria:
   - {id: outcome_vs_majority, tier: tracked, metric: top_outcome_ok, op: ">=", reference: majority_baseline}
   - {id: outcome_interval_vs_majority, tier: tracked, blocking_from_n: 100, mode: wilson_lower,
      metric: top_outcome_ok, op: ">=", reference: majority_baseline}
+  # A model is only worth its cost on outcomes if it beats what the retrieved precedents say.
+  - {id: outcome_vs_precedent, tier: tracked, metric: top_outcome_ok, op: ">=", reference_system: baseline_precedent}
   - {id: outcome_vs_base, tier: tracked, metric: top_outcome_ok, op: ">=", reference_system: base, margin: -0.10}
   - {id: likelihood_within_caps, tier: tracked, metric: likelihood_over_cap, op: "<=", value: 3}

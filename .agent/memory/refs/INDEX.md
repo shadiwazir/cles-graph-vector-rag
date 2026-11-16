@@ -41,7 +41,7 @@ INSTRUCTIONS.md or AGENTS.md. ADRs keep their own detail and may carry a tag.
 | [ob.3] | MLflow, DVC, observability in every run | ADR 0019, docs/03 |
 | [pr.2] | Web console as the landing page | ADR 0020 |
 | [ml.8] | Acceptance criteria; serving for the console | ADR 0021, docs/05, docs/06 |
-| [ml.9] | Improvement plan: calibration first | docs/08 |
+| [ml.9] | Improvement plan; heterogeneous data, decision-level measurement | ADR 0022, docs/08, docs/05 |
 | [pl.1] | Orchestration and flowlit | ADR 0005 |
 | [pl.2] | Run playbook and pipeline script | docs/07 |
 | [pr.1] | Two goals; PoC on about 100 decisions | docs/06, docs/04 |

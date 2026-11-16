@@ -17,9 +17,11 @@ from cles.config import get_settings
 from cles.db import connect, recorded_run
 from cles.domain.pack import load_pack
 from cles.evaluation.answers import parse_answer
+from cles.evaluation.baselines import baseline_rows, load_outcomes, prior_outcome, summarize
 from cles.evaluation.generate import load_eval_examples, read_done
 from cles.evaluation.judge import mean_faithfulness
 from cles.evaluation.scoring import aggregate, score_answer
+from cles.extraction.export import EXPORT_FILE
 from cles.graph.client import make_driver
 from cles.inference.verifier import CitationVerifier
 from cles.observability import metrics as m
@@ -88,6 +90,7 @@ def run(ctx: StageContext) -> dict:
         driver.close()
 
     results = {name: aggregate(r) for name, r in rows.items()}
+    baselines = baseline_results(folder, examples, early)
     for name in results:  # LLM-judge faithfulness, when `judge_eval` has run (a trend signal)
         judged = mean_faithfulness(settings.eval_out_dir / name / "judge.jsonl")
         if judged:
@@ -96,17 +99,20 @@ def run(ctx: StageContext) -> dict:
                 results[name]["all"]["judge_faithfulness_mean"],
             ) = judged
     settings.eval_out_dir.mkdir(parents=True, exist_ok=True)
+    everything = {**results, **baselines}  # baselines sit next to the systems for metrics/MLflow
     (settings.eval_out_dir / "report.json").write_text(
-        json.dumps({"dataset": str(folder), "results": results, "rows": rows}, indent=2)
+        json.dumps({"dataset": str(folder), "results": everything, "rows": rows}, indent=2)
     )
-    (settings.eval_out_dir / "report.md").write_text(_markdown(folder, results, len(examples)))
+    (settings.eval_out_dir / "report.md").write_text(
+        _markdown(folder, results, len(examples), baselines)
+    )
     report_md = settings.eval_out_dir / "report.md"
-    flat = write_metrics_file(Path(settings.eval_metrics_file), results)
-    emit_gauges(results)
+    flat = write_metrics_file(Path(settings.eval_metrics_file), everything)
+    emit_gauges(everything)
     mlflow_runs = log_eval_runs(
-        settings, results, folder, systems_meta(settings, outputs), report_md
+        settings, everything, folder, systems_meta(settings, outputs), report_md
     )
-    headline = {n: r["all"]["top_outcome_ok"]["rate"] for n, r in results.items()}
+    headline = {n: r["all"]["top_outcome_ok"]["rate"] for n, r in everything.items()}
     return {
         "systems": list(outputs),
         "examples": len(examples),
@@ -116,6 +122,20 @@ def run(ctx: StageContext) -> dict:
         "report": str(report_md),
         "metrics": len(flat),
     }
+
+
+def baseline_results(folder: Path, examples: list[dict], early: set[str]) -> dict[str, dict]:
+    """{'baseline_prior': {'all': summary}, 'baseline_precedent': ...} for the same examples as
+    the systems, or {} when the extraction export is missing (they need the outcomes of the
+    context decisions)."""
+    if not EXPORT_FILE.is_file():
+        log.warning("no %s: model-free baselines skipped", EXPORT_FILE)
+        return {}
+    manifest = json.loads((folder / "manifest.json").read_text())
+    train = [json.loads(x) for x in (folder / "train.jsonl").read_text().splitlines() if x]
+    outcomes = load_outcomes(EXPORT_FILE, manifest.get("extraction_version"))
+    rows = baseline_rows(examples, outcomes, prior_outcome(train), early)
+    return {name: {"all": summarize(r)} for name, r in rows.items()}
 
 
 def write_metrics_file(path: Path, results: dict) -> dict[str, float]:
@@ -157,7 +177,7 @@ def _pct(cell: dict) -> str:
     return "n/a" if cell["rate"] is None else f"{cell['rate']:.0%} ({cell['hits']}/{cell['n']})"
 
 
-def _markdown(folder, results: dict, n: int) -> str:
+def _markdown(folder, results: dict, n: int, baselines: dict | None = None) -> str:
     names = list(results)
     out = [
         f"# Model evaluation\n\nDataset `{folder}`, {n} held-out examples, same for every system.\n"
@@ -181,11 +201,41 @@ def _markdown(folder, results: dict, n: int) -> str:
             out.append(
                 f"| {label} | " + " | ".join(str(results[x][scope][key]) for x in names) + " |"
             )
+    out += _decision_section(results, baselines or {})
     out.append(
-        "\nWith about 12 examples per stage, differences under roughly 15 points are noise. "
-        "Ground truth is the real decision; the training targets were written with hindsight."
+        "\nThe independent unit is the decision (4 examples each), not the example: judge "
+        "differences by the intervals above. Ground truth is the real decision; the training "
+        "targets were written with hindsight."
     )
     return "\n".join(out) + "\n"
+
+
+def _interval(summary: dict, key: str) -> str:
+    low, high = summary.get(f"{key}_low"), summary.get(f"{key}_high")
+    return "n/a" if low is None else f"{low:.0%} to {high:.0%}"
+
+
+def _decision_section(results: dict, baselines: dict) -> list[str]:
+    """Top-route accuracy on late stages with a 95% interval over decisions, models and
+    model-free baselines side by side."""
+    out = [
+        "\n## Outcome of the top route, with decision-level intervals (late stages)\n",
+        "| predictor | right | 95% interval over decisions | decisions |",
+        "|---|---|---|---|",
+    ]
+    for name, scopes in {**results, **baselines}.items():
+        s = scopes["all"]
+        out.append(
+            f"| {name} | {_pct(s['top_outcome_ok'])} | {_interval(s, 'top_outcome')} "
+            f"| {s['decisions']} |"
+        )
+    precedent = baselines.get("baseline_precedent", {}).get("all", {}).get("unanimous_ok")
+    if precedent:
+        out.append(
+            f"\nWhen the retrieved precedents all agree, the precedent vote is right "
+            f'{_pct(precedent)}: the reference for a model that rates a route "high".'
+        )
+    return out
 
 
 if __name__ == "__main__":

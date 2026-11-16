@@ -6,6 +6,7 @@ hindsight-written training target.
 
 from collections import defaultdict
 
+from cles.evaluation.statistics import cluster_bootstrap
 from cles.inference.calibration import cap_likelihood
 
 MAJORITY_OUTCOME = "appeal_dismissed"  # reference: always predict the most common outcome
@@ -33,6 +34,7 @@ def score_answer(
     over_cap = len(cap_likelihood(_copy(advice, routes), example["evidence_strength"], stage_caps))
     return {
         "example_id": example["example_id"],
+        "doc_id": example["doc_id"],
         "stage": example["stage"],
         "outcome": truth,
         "parsed": advice is not None,
@@ -79,12 +81,27 @@ def aggregate(rows: list[dict]) -> dict:
     return {"all": _summary(rows), **{s: _summary(v) for s, v in sorted(by_stage.items())}}
 
 
+def _decision_interval(rows: list[dict], value) -> dict:
+    """Cluster bootstrap over decisions of a per-example flag (see evaluation/statistics.py)."""
+    return cluster_bootstrap([(r.get("doc_id", r["example_id"]), value(r)) for r in rows])
+
+
 def _summary(rows: list[dict]) -> dict:
+    top = _decision_interval(rows, lambda r: r["top_outcome_ok"])
+    high = _decision_interval(
+        rows, lambda r: r["top_outcome_ok"] if r.get("top_likelihood") == "high" else None
+    )
     claimed = sum(r["cites_claimed"] for r in rows)
     verified_total = sum(r["cites_total"] for r in rows)
     failed = sum(r["cites_failed"] for r in rows)
     return {
         "examples": len(rows),
+        # the independent unit is the decision: 4 examples of one decision are not 4 cases
+        "decisions": len({r.get("doc_id", r["example_id"]) for r in rows}),
+        "top_outcome_low": top["low"],
+        "top_outcome_high": top["high"],
+        "high_precision_low": high["low"],
+        "high_precision_high": high["high"],
         "citation_failure_rate": failed / verified_total if verified_total else None,
         "valid_json": _rate([r["parsed"] for r in rows]),
         "valid_schema": _rate([r["schema_valid"] for r in rows]),

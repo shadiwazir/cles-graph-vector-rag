@@ -153,12 +153,17 @@ class TrainingConfig(BaseModel):
     # stages the first route's name must not match the patterns.
     early_stages: list[str] = Field(default_factory=list)
     early_route_name_patterns: list[str] = Field(default_factory=list)
+    # Parties that appear in many unrelated decisions and say nothing about a shared case: the
+    # state side, institutions, placeholder names. The rest of the parties link decisions of one
+    # case family (an appeal and its retrial appeal, companion appeals of co-accused).
+    family_ignore_party_kinds: list[str] = Field(default_factory=list)
+    family_ignore_name_patterns: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _not_empty(self) -> "TrainingConfig":
         if not self.questions or any(not qs for qs in self.questions.values()):
             raise ValueError("every stage needs at least one question")
-        for pattern in self.early_route_name_patterns:
+        for pattern in [*self.early_route_name_patterns, *self.family_ignore_name_patterns]:
             try:
                 re.compile(pattern)
             except re.error as exc:

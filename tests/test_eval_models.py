@@ -14,6 +14,7 @@ EARLY = {"facts", "procedural_history"}
 def example(stage="lower_court_decision", outcome="appeal_dismissed", remedies=()):
     return {
         "example_id": f"X#{stage}",
+        "doc_id": "X",
         "stage": stage,
         "outcome": outcome,
         "remedies": list(remedies),

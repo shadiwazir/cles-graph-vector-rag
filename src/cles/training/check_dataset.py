@@ -1,12 +1,16 @@
 """Stage: re-check a written dataset against leakage rules L1 to L5, independently of the
-builder. Fails (exit 1) on any violation."""
+builder. Fails (exit 1) on any violation. Also reports how well the split measures what it
+should (training/evaluation outcome shift, case families across the split); these are
+warnings in the summary, not failures (see training/diagnostics.py)."""
 
 import json
 from datetime import date
 
 from cles.config import get_settings
 from cles.domain.pack import load_pack
+from cles.extraction.export import EXPORT_FILE
 from cles.stage import StageContext, stage_main
+from cles.training.diagnostics import family_candidates, outcome_shift, party_keys
 from cles.training.leakage import check_example, check_split
 
 
@@ -35,7 +39,32 @@ def run(ctx: StageContext) -> dict:
         ]
     if violations:
         raise RuntimeError(f"{len(violations)} leakage violations, first: {violations[:3]}")
-    return {"dataset": str(folder), "examples": len(examples), "violations": 0}
+    summary = {"dataset": str(folder), "examples": len(examples), "violations": 0}
+    shift = outcome_shift(examples)
+    summary |= {"outcome_shift": shift["distance"], "decisions": shift["decisions"]}
+    summary["outcome_share"] = shift["share"]
+    summary["family_candidates"] = _family_candidates(pack, manifest, examples)
+    return summary
+
+
+def _family_candidates(pack, manifest: dict, examples: list[dict]) -> list[dict] | str:
+    """Decisions that share a party across the split, from the versioned extraction export."""
+    if not EXPORT_FILE.is_file():
+        return f"not checked: {EXPORT_FILE} does not exist"
+    split_by_doc = {e["doc_id"]: e["split"] for e in examples}
+    parties: dict[str, set[str]] = {}
+    for line in EXPORT_FILE.read_text().splitlines():
+        row = json.loads(line)
+        if row["status"] != "ok" or row["doc_id"] not in split_by_doc:
+            continue
+        if row["schema_version"] != manifest.get("extraction_version"):
+            continue
+        parties[row["doc_id"]] = party_keys(
+            row["result"].get("parties", []),
+            pack.training.family_ignore_party_kinds,
+            pack.training.family_ignore_name_patterns,
+        )
+    return family_candidates(parties, split_by_doc)
 
 
 if __name__ == "__main__":

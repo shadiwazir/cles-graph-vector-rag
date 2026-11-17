@@ -123,6 +123,22 @@ The 48 examples are 12 decisions with four stages each; the independent unit is 
 - Dataset diagnostics (`check_dataset`, warnings): outcome shift between training (79% dismissed, 93 decisions) and evaluation (42% dismissed, 12 decisions) is 0.37; no case family crosses the split.
 - Tests: `tests/test_eval_statistics.py` (cluster rate and interval, baselines, outcome shift, family candidates).
 
+### Serving-time precedent rule, replayed (2026-11-16) [ml.9]
+
+Rule (`inference/calibration.py: apply_precedent_rule`, fixed by principle before looking at the answers): at late stages a route may be rated "high" only if at least 2 retrieved decisions have a known outcome and all equal the route's expected outcome; otherwise it is lowered to "medium". Replayed on the stored answers of every system inside `eval_score` (systems named `<system>+rule` in the report, metrics and MLflow); no model call, no cost.
+
+| system | top routes rated high, before -> after | right, before -> after | wrong, before -> after |
+|--------|----------------------------------------|------------------------|------------------------|
+| fine-tuned 4-bit | 17 -> 7 | 8 -> 4 (47% -> 57%) | 9 -> 3 |
+| fine-tuned 16-bit served | 14 -> 6 | 7 -> 3 (50% -> 50%) | 7 -> 3 |
+| OpenAI | 5 -> 3 | 4 -> 2 (80% -> 67%) | 1 -> 1 |
+| base | 3 -> 2 | 3 -> 2 | 0 -> 0 |
+
+- The rule makes "high" rarer and removes most wrong "high" routes (9 -> 3, 7 -> 3), but precision stays under the 67% gate and the intervals are very wide (for example 17% to 89% on 7 routes). At 12 decisions the effect is not statistically separable from noise.
+- Sensitivity, exploratory and not used to choose (stricter variants keep 5 to 7 routes): unanimous with at least 3 decisions 67% (4/6); at least 75% agreeing among 4 or more 71% (5/7); plurality only 54% (7/13); never "high" leaves nothing to measure. A stricter rule looks better but is the kind of tuning a 12-decision evaluation cannot support.
+- The gate (`high_is_reliable`, min 5 cases) becomes unmeasurable when "high" is rare, which is the intended outcome of the rule, not a pass.
+- Not in the product yet: the console and `/advise` still show the model's own rating (applying the rule needs the outcomes of the retrieved decisions at serving time).
+
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 
 Specified in `eval/acceptance.yaml`, checked by `scripts/pipeline.sh accept` (`accept_check`). Acceptance is **provisional**: no lawyer review is performed in this PoC, and 48 held-out examples are too few for outcome accuracy. Thresholds are set by reasoning, not tuned to a result, and tighten as data grows.

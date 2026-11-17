@@ -26,3 +26,35 @@ def cap_likelihood(
                 f"{reason}"
             )
     return warnings
+
+
+def apply_precedent_rule(
+    advice: dict,
+    context_outcomes: list[str],
+    early_stages: set[str],
+    min_decisions: int = 2,
+) -> list[str]:
+    """A route may be rated "high" only when the retrieved precedents back its outcome.
+
+    The rule is fixed by principle, not fitted to any model's answers: "high" needs at least
+    `min_decisions` retrieved decisions with a known outcome, all equal to the route's expected
+    outcome (the evidence speaks with one voice). Otherwise the route is lowered to "medium".
+    It applies to late stages only, where routes name an appeal result; at early stages the
+    stage cap already limits the likelihood. `context_outcomes` are the outcomes of the decisions
+    retrieved for this request. Returns a warning per changed route."""
+    if advice.get("stage") in early_stages:
+        return []
+    known = [o for o in context_outcomes if o]
+    warnings = []
+    for route in advice.get("routes", []):
+        if route.get("likelihood") != "high":
+            continue
+        outcome = route.get("expected_outcome")
+        if len(known) >= min_decisions and all(o == outcome for o in known):
+            continue
+        route["likelihood"] = "medium"
+        warnings.append(
+            f"likelihood of '{route.get('name', '?')}' lowered from high to medium: the "
+            f"retrieved decisions do not all support the outcome '{outcome}'"
+        )
+    return warnings

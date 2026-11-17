@@ -5,6 +5,7 @@ deterministic verifier (needs Postgres and Neo4j), and writes artifacts/eval/rep
 report.md. No paid calls. Systems are compared on the same examples only.
 """
 
+import copy
 import json
 import logging
 from datetime import date
@@ -23,6 +24,7 @@ from cles.evaluation.judge import mean_faithfulness
 from cles.evaluation.scoring import aggregate, score_answer
 from cles.extraction.export import EXPORT_FILE
 from cles.graph.client import make_driver
+from cles.inference.calibration import apply_precedent_rule
 from cles.inference.verifier import CitationVerifier
 from cles.observability import metrics as m
 from cles.retrieval.graph import GraphRetriever
@@ -63,7 +65,9 @@ def run(ctx: StageContext) -> dict:
     ids = set.intersection(*(set(o) for o in outputs.values()))  # compare on common examples
     examples = [e for e in examples if e["example_id"] in ids]
 
+    outcomes = context_outcomes_map(folder)  # empty when the extraction export is missing
     rows: dict[str, list[dict]] = {name: [] for name in outputs}
+    rule_rows: dict[str, list[dict]] = {f"{name}+rule": [] for name in outputs} if outcomes else {}
     driver = make_driver(settings)
     try:
         with connect(settings) as conn, recorded_run(conn, "eval_score", ctx.run_id) as stats:
@@ -85,12 +89,25 @@ def run(ctx: StageContext) -> dict:
                             log.warning("verify failed for %s/%s: %s", name, e["example_id"], exc)
                     row = score_answer(e, advice, errors, early, caps, total, failed)
                     rows[name].append({**row, "citation_checks": checks})
+                    if outcomes:  # the same answer after the serving-time precedent rule
+                        calibrated = copy.deepcopy(advice) if isinstance(advice, dict) else advice
+                        if isinstance(calibrated, dict) and isinstance(
+                            calibrated.get("routes"), list
+                        ):
+                            ctx = [outcomes.get(c["doc_id"], "") for c in e["context_docs"]]
+                            apply_precedent_rule(
+                                calibrated, ctx, early, settings.precedent_rule_min_decisions
+                            )
+                        rule_rows[f"{name}+rule"].append(
+                            score_answer(e, calibrated, errors, early, caps, total, failed)
+                        )
             stats.update(systems=list(outputs), examples=len(examples))
     finally:
         driver.close()
 
     results = {name: aggregate(r) for name, r in rows.items()}
     baselines = baseline_results(folder, examples, early)
+    calibrated = {name: aggregate(r) for name, r in rule_rows.items()}
     for name in results:  # LLM-judge faithfulness, when `judge_eval` has run (a trend signal)
         judged = mean_faithfulness(settings.eval_out_dir / name / "judge.jsonl")
         if judged:
@@ -99,12 +116,13 @@ def run(ctx: StageContext) -> dict:
                 results[name]["all"]["judge_faithfulness_mean"],
             ) = judged
     settings.eval_out_dir.mkdir(parents=True, exist_ok=True)
-    everything = {**results, **baselines}  # baselines sit next to the systems for metrics/MLflow
+    # baselines and rule variants sit next to the systems for metrics, gauges and MLflow
+    everything = {**results, **baselines, **calibrated}
     (settings.eval_out_dir / "report.json").write_text(
         json.dumps({"dataset": str(folder), "results": everything, "rows": rows}, indent=2)
     )
     (settings.eval_out_dir / "report.md").write_text(
-        _markdown(folder, results, len(examples), baselines)
+        _markdown(folder, results, len(examples), baselines, calibrated)
     )
     report_md = settings.eval_out_dir / "report.md"
     flat = write_metrics_file(Path(settings.eval_metrics_file), everything)
@@ -122,6 +140,14 @@ def run(ctx: StageContext) -> dict:
         "report": str(report_md),
         "metrics": len(flat),
     }
+
+
+def context_outcomes_map(folder: Path) -> dict[str, str]:
+    """doc_id -> outcome for the precedent rule and the baselines ({} without the export)."""
+    if not EXPORT_FILE.is_file():
+        return {}
+    manifest = json.loads((folder / "manifest.json").read_text())
+    return load_outcomes(EXPORT_FILE, manifest.get("extraction_version"))
 
 
 def baseline_results(folder: Path, examples: list[dict], early: set[str]) -> dict[str, dict]:
@@ -177,7 +203,9 @@ def _pct(cell: dict) -> str:
     return "n/a" if cell["rate"] is None else f"{cell['rate']:.0%} ({cell['hits']}/{cell['n']})"
 
 
-def _markdown(folder, results: dict, n: int, baselines: dict | None = None) -> str:
+def _markdown(
+    folder, results: dict, n: int, baselines: dict | None = None, calibrated: dict | None = None
+) -> str:
     names = list(results)
     out = [
         f"# Model evaluation\n\nDataset `{folder}`, {n} held-out examples, same for every system.\n"
@@ -202,6 +230,7 @@ def _markdown(folder, results: dict, n: int, baselines: dict | None = None) -> s
                 f"| {label} | " + " | ".join(str(results[x][scope][key]) for x in names) + " |"
             )
     out += _decision_section(results, baselines or {})
+    out += _rule_section(results, calibrated or {})
     out.append(
         "\nThe independent unit is the decision (4 examples each), not the example: judge "
         "differences by the intervals above. Ground truth is the real decision; the training "
@@ -236,6 +265,29 @@ def _decision_section(results: dict, baselines: dict) -> list[str]:
             f'{_pct(precedent)}: the reference for a model that rates a route "high".'
         )
     return out
+
+
+def _rule_section(results: dict, calibrated: dict) -> list[str]:
+    """What the serving-time rule "high only if the retrieved precedents agree" does to each
+    system's answers: how many top routes stay "high", and how often those are right."""
+    if not calibrated:
+        return []
+    out = [
+        '\n## Serving-time rule: "high" only if the retrieved precedents agree (late stages)\n',
+        "| system | top routes rated high | right | wrong | right, 95% over decisions |",
+        "|---|---|---|---|---|",
+    ]
+    for name, scopes in results.items():
+        for label, s in (
+            (name, scopes["all"]),
+            (f"{name}+rule", calibrated[f"{name}+rule"]["all"]),
+        ):
+            cell = s["high_precision"]
+            out.append(
+                f"| {label} | {cell['n']} | {cell['hits']} | {s['high_and_wrong']} "
+                f"| {_pct(cell)} {_interval(s, 'high_precision')} |"
+            )
+    return out + ["\nThe gate needs a top route rated high to be right 2 times in 3 (docs/05)."]
 
 
 if __name__ == "__main__":

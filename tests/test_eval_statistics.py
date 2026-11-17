@@ -155,3 +155,41 @@ def test_family_candidates_cross_the_split_only_and_ignore_the_state_side():
     split = {"a": "train", "b": "train", "c": "eval", "d": "eval"}
     found = family_candidates(parties, split)
     assert [f["docs"] for f in found] == [["a", "c"], ["b", "c"]]  # not a-b (same side)
+
+
+def _advice(stage, *routes):
+    return {
+        "stage": stage,
+        "routes": [
+            {"name": f"r{i}", "expected_outcome": o, "likelihood": lk}
+            for i, (o, lk) in enumerate(routes)
+        ],
+    }
+
+
+def test_precedent_rule_keeps_high_only_when_all_precedents_agree():
+    from cles.inference.calibration import apply_precedent_rule
+
+    agree = _advice("grounds_of_appeal", ("dismissed", "high"), ("allowed", "medium"))
+    assert apply_precedent_rule(agree, ["dismissed", "dismissed"], EARLY) == []
+    assert agree["routes"][0]["likelihood"] == "high"
+
+    split = _advice("grounds_of_appeal", ("dismissed", "high"))
+    warnings = apply_precedent_rule(split, ["dismissed", "allowed", "dismissed"], EARLY)
+    assert split["routes"][0]["likelihood"] == "medium" and len(warnings) == 1
+
+    other = _advice("grounds_of_appeal", ("allowed", "high"))  # precedents agree on another outcome
+    apply_precedent_rule(other, ["dismissed", "dismissed"], EARLY)
+    assert other["routes"][0]["likelihood"] == "medium"
+
+
+def test_precedent_rule_needs_enough_known_decisions_and_skips_early_stages():
+    from cles.inference.calibration import apply_precedent_rule
+
+    one = _advice("grounds_of_appeal", ("dismissed", "high"))
+    apply_precedent_rule(one, ["dismissed", ""], EARLY)  # one known outcome is not agreement
+    assert one["routes"][0]["likelihood"] == "medium"
+    assert apply_precedent_rule(_advice("facts", ("x", "high")), [], EARLY) == []
+    low = _advice("grounds_of_appeal", ("dismissed", "low"))
+    apply_precedent_rule(low, ["allowed", "dismissed"], EARLY)  # never raises, only lowers high
+    assert low["routes"][0]["likelihood"] == "low"

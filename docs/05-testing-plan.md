@@ -154,7 +154,29 @@ Top route = real outcome, late-stage examples, 95% interval over decisions:
 - The base rate drives everything: the training-majority predictor follows the dismissal rate of the window (68%, 68%, 45% dismissed), so the same system scores 45% or 69% depending on the window. A model must be judged against the majority predictor inside the same fold, not against a fixed number.
 - Retrieval adds nothing beyond the base rate for outcomes: the precedent vote (60%) equals the majority predictor (61%). Counting only same-type precedents does not help either (55%, within noise); 96% of the late-stage examples have at least one same-type precedent. So the case type does not make the evidence for the outcome better; it may still matter for remedies and reasoning, which these predictors do not test (docs/08, case-type experiments c and d).
 - Earlier numbers (12 decisions, October 2026) are not comparable: that window had 42% dismissed.
+- Calibration check by evidence alone (dev folds, 201 late-stage examples, no model): top route = plurality outcome of the retrieved decisions, rated "high" when at least 2 decisions have a known outcome and all agree: right 86% [68 to 100] on 22 examples (18 decisions); "medium" 57% [47 to 66] on 166; "low" 54% on 13 (too few). This is the basis of ADR 0024 (evidence sets the likelihood and the order; `inference/evidence.py`, `tests/test_evidence.py`).
 - Run: `scripts/pipeline.sh folds`; the test fold only with `FOLDS_INCLUDE_TEST=1 FOLDS_TEST_REASON="..."` (logged in `eval/test_log.jsonl`).
+
+### Evidence-led serving replayed on OpenAI answers, three dev folds (2026-11-17) [ml.9] (ADR 0024)
+
+OpenAI gpt-5.4-mini answered the three dev folds with the new prompts (precedent outcomes and graph facts in the context); each answer is also scored after two serving-time calibrations (`+rule`: "high" only if the retrieved precedents agree; `+lead`: the precedents set every likelihood and the order of the routes). Pooled over about 101 decisions, 201 late-stage examples, 95% intervals over decisions:
+
+| system | top route right | top routes rated high | high: right | schema valid | citations failing |
+|--------|-----------------|-----------------------|-------------|--------------|-------------------|
+| training majority (no model) | 61% [52 to 71] | | | | |
+| precedent vote (no model) | 60% [51 to 68] | | | | |
+| openai (raw) | 53% [44 to 62] | 110 | 58% (64/110) [47 to 69] | 77% | 7.5% |
+| openai + rule | 53% | 22 | 86% (19/22) [68 to 100] | 77% | 7.5% |
+| openai + lead | 58% [50 to 66] | 21 | 90% (19/21) [75 to 100] | 77% | 7.5% |
+
+Per fold, top route right: openai 57%, 59%, 42%; openai + lead 64%, 64%, 44%; majority 69%, 69%, 45%.
+
+- Calibration is the result that matters: the raw model rates 55% of its top routes "high" (110 of 201) and is right 58% of the time (gate: 2 in 3). With the precedents setting the likelihoods "high" is rare (21) and right 19 times (90%, lower bound 75%), in line with the 86% found for the evidence alone (folds, above). The gate `high_is_reliable` would pass for `+rule` and `+lead` and fails for the raw model.
+- Top-route accuracy does not beat the base rate: `+lead` (58%) is within noise of the precedent vote (60%) and the training majority (61%); it improves on the raw model (53%) because the precedent vote re-orders the routes, not because of model skill. The third fold is hard for every predictor (45% dismissed, scores 42% to 47%).
+- 23% of the answers do not match the schema and count as wrong for the top route.
+- By case type (top route right, `+lead`): criminal 56%, civil 58%; raw: criminal 48%, civil 57%.
+- Cost of the baseline: 4.30 USD (the third fold was retried after the account ran out of credits; failed requests are no longer cached).
+- `PRECEDENT_LEAD_ENABLED` stays off until a fine-tuned model has been replayed the same way.
 
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 

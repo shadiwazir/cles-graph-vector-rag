@@ -89,10 +89,14 @@ def prepare_examples(
     retriever: HybridRetriever,
     limit: int | None = None,
     cache: dict[str, Prepared] | None = None,
+    outcomes: dict[str, str] | None = None,
+    min_decisions: int = 2,
 ) -> list[Prepared]:
     """Examples for every stage of every document. `cache` (example_id -> Prepared) lets several
     folds share the training examples: their context depends on the document's own date only,
-    never on the split, so it is retrieved once."""
+    never on the split, so it is retrieved once. `outcomes` (doc_id -> outcome) lets the prompt
+    state the outcomes of the retrieved decisions and lets the target take its likelihoods from
+    them (ADR 0024); without it the prompt has no such section."""
     prepared: list[Prepared] = []
     for doc in sorted(docs, key=lambda d: (d.doc_date, d.doc_id)):
         for stage_item in doc.extraction.get("stages", []):
@@ -111,7 +115,12 @@ def prepare_examples(
                 search_text(AdviceRequest(case_text, question)),
                 SearchFilter(as_of=as_of, exclude_doc_ids=(doc.doc_id,)),
             )
-            base = build_messages(pack, case_text, question, context)
+            precedent = (
+                None
+                if outcomes is None
+                else [outcomes[d] for d in context.retrieved_doc_ids if d in outcomes]
+            )
+            base = build_messages(pack, case_text, question, context, precedent)
             target = build_target_messages(pack, base, doc.extraction, stage_item)
             spec = TargetSpec(
                 doc.doc_id,
@@ -122,6 +131,8 @@ def prepare_examples(
                 context,
                 tuple(pack.training.early_stages),
                 tuple(pack.training.early_route_name_patterns),
+                tuple(precedent or ()),
+                min_decisions,
             )
             item = Prepared(
                 example_id,
@@ -223,7 +234,17 @@ def run(ctx: StageContext) -> dict:
             split_date, split = assign_split(docs, settings.training_eval_fraction)
             graph = GraphRetriever(driver, pack)
             retriever = HybridRetriever(conn, Embedder.from_settings(settings), graph, settings)
-            items = prepare_examples(docs, split, split_date, pack, retriever, ctx.limit)
+            outcomes = {d.doc_id: d.extraction["outcome"] for d in docs}
+            items = prepare_examples(
+                docs,
+                split,
+                split_date,
+                pack,
+                retriever,
+                ctx.limit,
+                outcomes=outcomes,
+                min_decisions=settings.precedent_rule_min_decisions,
+            )
             dates = document_dates(conn)
             for item in items:
                 item.doc_dates = dates  # dates of context documents, for the leakage check
@@ -264,7 +285,12 @@ def run(ctx: StageContext) -> dict:
         driver.close()
 
 
-def _generate_missing(conn, todo: list[Prepared], pack, settings: Settings, model: str) -> float:
+def _generate_missing(
+    conn, todo: list[Prepared], pack, settings: Settings, model: str, max_spend: float | None = None
+) -> float:
+    """Generate the missing targets (paid, cached). With `max_spend`, calls not yet started are
+    cancelled once the spend so far passes it (calls already running still finish and are saved,
+    so a rerun continues from the cache)."""
     if not todo:
         return 0.0
     client = make_client(settings)
@@ -274,6 +300,8 @@ def _generate_missing(conn, todo: list[Prepared], pack, settings: Settings, mode
             pool.submit(generate_target, client, i.target_messages, pack, i.spec): i for i in todo
         }
         for future in as_completed(futures):  # DB writes stay on this thread
+            if future.cancelled():
+                continue
             item, outcome = futures[future], future.result()
             cost = estimate_cost(
                 outcome.input_tokens,
@@ -283,6 +311,13 @@ def _generate_missing(conn, todo: list[Prepared], pack, settings: Settings, mode
             )
             save_target(conn, item, model, outcome, cost)
             spent += cost or 0.0
+            if max_spend is not None and spent > max_spend:
+                log.warning(
+                    "spend %.2f passed the ceiling %.2f: cancelling the rest", spent, max_spend
+                )
+                for pending in futures:
+                    pending.cancel()
+                max_spend = None  # cancel once
             if outcome.status != "ok":
                 log.warning("%s: %s: %s", item.example_id, outcome.status, outcome.error)
     return spent

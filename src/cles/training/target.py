@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from cles.domain.pack import DomainPack
 from cles.inference.calibration import cap_likelihood
+from cles.inference.evidence import apply_evidence
 from cles.inference.verifier import quote_in_paragraph
 from cles.llm.base import LLMClient
 from cles.llm.structured import StructuredResult, ask_for_json
@@ -26,6 +27,10 @@ class TargetSpec:
     context: ContextPack
     early_stages: tuple[str, ...] = ()
     early_route_name_patterns: tuple[str, ...] = ()
+    # outcomes of the retrieved decisions: the likelihood and the order of the routes of a late
+    # stage follow from them (inference/evidence.py), not from the writer
+    precedent_outcomes: tuple[str, ...] = ()
+    min_decisions: int = 2
 
 
 def build_target_messages(
@@ -62,15 +67,25 @@ def check_target(advice: dict, spec: TargetSpec) -> list[str]:
                     "lawyer does or what happens next)"
                 )
                 break
-    if top.get("expected_outcome") != spec.outcome:
+    if spec.stage in spec.early_stages:  # the first route is the path that actually happened
+        if top.get("expected_outcome") != spec.outcome:
+            problems.append(
+                f"routes/0/expected_outcome must equal '{spec.outcome}' (the first route matches "
+                f"what actually happened), got '{top.get('expected_outcome')}'"
+            )
+        if set(top.get("expected_remedies", [])) != set(spec.remedies):
+            problems.append(
+                f"routes/0/expected_remedies must equal {list(spec.remedies)}, "
+                f"got {top.get('expected_remedies', [])}"
+            )
+    elif not any(
+        r.get("expected_outcome") == spec.outcome
+        and set(r.get("expected_remedies", [])) == set(spec.remedies)
+        for r in routes
+    ):  # late stage: the real path is one of the routes, in no particular place
         problems.append(
-            f"routes/0/expected_outcome must equal '{spec.outcome}' (the first route matches "
-            f"what actually happened), got '{top.get('expected_outcome')}'"
-        )
-    if set(top.get("expected_remedies", [])) != set(spec.remedies):
-        problems.append(
-            f"routes/0/expected_remedies must equal {list(spec.remedies)}, "
-            f"got {top.get('expected_remedies', [])}"
+            f"one route must have expected_outcome '{spec.outcome}' and expected_remedies "
+            f"{list(spec.remedies)} (the path that actually happened)"
         )
     for i, route in enumerate(routes):
         for j, authority in enumerate(route.get("authorities", [])):
@@ -118,5 +133,12 @@ def generate_target(
         return outcome
     advice = outcome.result
     advice["evidence_strength"] = spec.context.evidence_strength
+    apply_evidence(  # late stages: the precedents set the likelihoods and the order of the routes
+        advice,
+        list(spec.precedent_outcomes),
+        set(spec.early_stages),
+        spec.min_decisions,
+        seed=f"{spec.doc_id}#{spec.stage}",
+    )
     cap_likelihood(advice, spec.context.evidence_strength, pack.info.likelihood_caps_by_stage)
     return StructuredResult("ok", advice, outcome.input_tokens, outcome.output_tokens)

@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # "high" needs this many retrieved decisions, all agreeing (inference/calibration.py);
     # applied by the advisor unless switched off (replayed on the evaluation in docs/05)
     precedent_rule_enabled: bool = True
+    # Evidence decides (ADR 0024): the advisor sets every route's likelihood and the route order
+    # from the outcomes of the retrieved decisions, and the model only explains. Off until it is
+    # replayed on model outputs of the development folds; replaces the cap-only rule when on.
+    precedent_lead_enabled: bool = False
     precedent_rule_min_decisions: int = 2
     eval_batch_size: int = 4
     # Hosts we control that may receive case text besides localhost (for example a rented GPU
@@ -96,6 +100,9 @@ class Settings(BaseSettings):
     fold_dev_count: int = 3
     folds_out_dir: Path = Path("artifacts/folds")
     folds_targets: Literal["cached", "generate"] = "cached"
+    # Ceiling in USD for generating targets: the stage refuses to start when the estimate is above
+    # it and stops starting new calls when the spend so far passes it. Required for "generate".
+    folds_max_cost_usd: float = 0.0
     folds_dir: Path | None = None  # folds to evaluate; default: the newest in folds_out_dir
     folds_metrics_file: Path = Path("metrics/folds.json")  # git-tracked, for `dvc metrics`
     # The test fold is never used for a choice. Evaluating it needs a reason and is logged.

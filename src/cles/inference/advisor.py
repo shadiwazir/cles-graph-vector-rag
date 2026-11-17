@@ -13,6 +13,7 @@ import psycopg
 from cles.config import Settings
 from cles.domain.pack import DomainPack
 from cles.inference.calibration import apply_precedent_rule, cap_likelihood
+from cles.inference.evidence import apply_evidence
 from cles.inference.guard import check_generator_allowed
 from cles.inference.prompt import build_messages
 from cles.inference.verifier import CitationVerifier
@@ -105,7 +106,8 @@ class Advisor:
     ) -> AdviceResponse:
         context = self._retriever.retrieve(search_text(req), flt)
 
-        messages = build_messages(self._pack, req.case_text, req.question, context)
+        precedent = self._precedent_outcomes(context.retrieved_doc_ids)
+        messages = build_messages(self._pack, req.case_text, req.question, context, precedent)
         with span("generate", kind="LLM", **{"llm.model_name": self._client.model}) as gen:
             outcome = ask_for_json(self._client, messages, self._pack.advice_schema)
             gen.set_attribute("llm.token_count.prompt", outcome.input_tokens)
@@ -125,14 +127,14 @@ class Advisor:
             warnings += report.warnings()
             strength = _weaker(outcome.result.get("evidence_strength", strength), strength)
             advice["evidence_strength"] = strength
+            early = set(self._pack.training.early_stages)
+            min_decisions = self._settings.precedent_rule_min_decisions
+            lead = self._settings.precedent_lead_enabled
+            if lead:  # the evidence sets the numbers and the order, then the caps still apply
+                warnings += apply_evidence(advice, precedent, early, min_decisions, req.question)
             warnings += cap_likelihood(advice, strength, self._pack.info.likelihood_caps_by_stage)
-            if self._settings.precedent_rule_enabled:
-                warnings += apply_precedent_rule(
-                    advice,
-                    self._precedent_outcomes(context.retrieved_doc_ids),
-                    set(self._pack.training.early_stages),
-                    self._settings.precedent_rule_min_decisions,
-                )
+            if not lead and self._settings.precedent_rule_enabled:
+                warnings += apply_precedent_rule(advice, precedent, early, min_decisions)
         else:
             warnings.append(f"generation failed: {outcome.error}")
         if strength == "weak":

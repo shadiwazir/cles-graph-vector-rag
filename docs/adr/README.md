@@ -28,3 +28,4 @@ decision gets a new ADR that supersedes the old one.
 | 0021 | Acceptance criteria as a versioned file and a stage |
 | 0022 | Heterogeneous data: the decision is the unit, and model-free baselines |
 | 0023 | Rolling-origin folds with a locked test window |
+| 0024 | The retrieved precedents set the likelihood and the order of the routes |

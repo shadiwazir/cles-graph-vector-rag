@@ -153,6 +153,23 @@ def test_served_backend_uses_greedy_free_text_and_records_failures(monkeypatch):
     )
     by_id = {r["example_id"]: r for r in rows}
     assert by_id["a"]["input_tokens"] == 7 and by_id["a"]["output_tokens"] == 3
-    assert by_id["b"]["input_tokens"] == 0
+    assert "server down" in by_id["b"]["error"] and "text" not in by_id["b"]  # no answer at all
     ok = next(c for c in calls if "boom" not in c["messages"][1]["content"])
     assert ok["temperature"] == 0 and ok["max_tokens"] == 50 and "response_format" not in ok
+
+
+def test_failed_requests_are_reported_and_never_cached(tmp_path):
+    """A cached empty answer would be skipped on a rerun and scored as a wrong one (a lost API
+    credit once poisoned a whole fold this way)."""
+    from cles.config import Settings
+    from cles.evaluation.generate import read_done, write_rows
+
+    rows = [
+        {"example_id": "a", "text": "{}", "input_tokens": 10, "output_tokens": 5},
+        {"example_id": "b", "error": "429 no credits remaining"},
+        {"example_id": "c", "text": "not json", "input_tokens": 10, "output_tokens": 5},
+    ]
+    path = tmp_path / "outputs.jsonl"
+    cost, failed = write_rows(path, iter(rows), Settings(_env_file=None))
+    assert [f["example_id"] for f in failed] == ["b"]
+    assert sorted(read_done(path)) == ["a", "c"]  # an invalid answer is a result; a failure is not

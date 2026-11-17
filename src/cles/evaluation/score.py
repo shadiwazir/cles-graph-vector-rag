@@ -22,6 +22,7 @@ from cles.evaluation.baselines import (
     baseline_rows,
     load_decisions,
     load_outcomes,
+    majority,
     prior_outcome,
     summarize,
 )
@@ -30,7 +31,8 @@ from cles.evaluation.judge import mean_faithfulness
 from cles.evaluation.scoring import aggregate, score_answer
 from cles.extraction.export import EXPORT_FILE
 from cles.graph.client import make_driver
-from cles.inference.calibration import apply_precedent_rule
+from cles.inference.calibration import apply_precedent_rule, cap_likelihood
+from cles.inference.evidence import apply_evidence
 from cles.inference.verifier import CitationVerifier
 from cles.observability import metrics as m
 from cles.retrieval.graph import GraphRetriever
@@ -73,7 +75,8 @@ def run(ctx: StageContext) -> dict:
 
     outcomes = context_outcomes_map(folder)  # empty when the extraction export is missing
     rows: dict[str, list[dict]] = {name: [] for name in outputs}
-    rule_rows: dict[str, list[dict]] = {f"{name}+rule": [] for name in outputs} if outcomes else {}
+    variants = ("+rule", "+lead") if outcomes else ()  # serving-time calibrations, replayed
+    rule_rows: dict[str, list[dict]] = {f"{name}{v}": [] for name in outputs for v in variants}
     driver = make_driver(settings)
     try:
         with connect(settings) as conn, recorded_run(conn, "eval_score", ctx.run_id) as stats:
@@ -95,16 +98,18 @@ def run(ctx: StageContext) -> dict:
                             log.warning("verify failed for %s/%s: %s", name, e["example_id"], exc)
                     row = score_answer(e, advice, errors, early, caps, total, failed)
                     rows[name].append({**row, "citation_checks": checks})
-                    if outcomes:  # the same answer after the serving-time precedent rule
-                        calibrated = copy.deepcopy(advice) if isinstance(advice, dict) else advice
-                        if isinstance(calibrated, dict) and isinstance(
-                            calibrated.get("routes"), list
-                        ):
-                            ctx = [outcomes.get(c["doc_id"], "") for c in e["context_docs"]]
-                            apply_precedent_rule(
-                                calibrated, ctx, early, settings.precedent_rule_min_decisions
-                            )
-                        rule_rows[f"{name}+rule"].append(
+                    for variant in variants:  # the same answer after a serving-time calibration
+                        ctx = [outcomes.get(c["doc_id"], "") for c in e["context_docs"]]
+                        calibrated = calibrate_answer(
+                            advice,
+                            variant,
+                            ctx,
+                            early,
+                            caps,
+                            e,
+                            settings.precedent_rule_min_decisions,
+                        )
+                        rule_rows[f"{name}{variant}"].append(
                             score_answer(e, calibrated, errors, early, caps, total, failed)
                         )
             stats.update(systems=list(outputs), examples=len(examples))
@@ -125,7 +130,15 @@ def run(ctx: StageContext) -> dict:
     # baselines and rule variants sit next to the systems for metrics, gauges and MLflow
     everything = {**results, **baselines, **calibrated}
     (settings.eval_out_dir / "report.json").write_text(
-        json.dumps({"dataset": str(folder), "results": everything, "rows": rows}, indent=2)
+        json.dumps(
+            {
+                "dataset": str(folder),
+                "results": everything,
+                "rows": rows,
+                "variant_rows": rule_rows,  # the replayed calibrations, for pooling over folds
+            },
+            indent=2,
+        )
     )
     (settings.eval_out_dir / "report.md").write_text(
         _markdown(folder, results, len(examples), baselines, calibrated)
@@ -148,6 +161,33 @@ def run(ctx: StageContext) -> dict:
     }
 
 
+def calibrate_answer(
+    advice: dict | None,
+    variant: str,
+    context_outcomes: list[str],
+    early: set[str],
+    caps: dict[str, str],
+    example: dict,
+    min_decisions: int,
+) -> dict | None:
+    """A copy of one model answer after a serving-time calibration, replayed offline.
+
+    `+rule`: "high" only when the retrieved precedents agree (cap only). `+lead`: the precedents
+    set every likelihood and the order of the routes, then the evidence and stage caps apply (what
+    the advisor does with PRECEDENT_LEAD_ENABLED). An answer whose routes are not a list of
+    objects cannot be calibrated and is returned as it is (the scorer counts it as invalid)."""
+    calibrated = copy.deepcopy(advice) if isinstance(advice, dict) else advice
+    routes = calibrated.get("routes") if isinstance(calibrated, dict) else None
+    if not (isinstance(routes, list) and all(isinstance(r, dict) for r in routes)):
+        return calibrated
+    if variant == "+rule":
+        apply_precedent_rule(calibrated, context_outcomes, early, min_decisions)
+    else:
+        apply_evidence(calibrated, context_outcomes, early, min_decisions, example["example_id"])
+        cap_likelihood(calibrated, example["evidence_strength"], caps)
+    return calibrated
+
+
 def context_outcomes_map(folder: Path) -> dict[str, str]:
     """doc_id -> outcome for the precedent rule and the baselines ({} without the export)."""
     if not EXPORT_FILE.is_file():
@@ -164,11 +204,17 @@ def baseline_results(folder: Path, examples: list[dict], early: set[str]) -> dic
         log.warning("no %s: model-free baselines skipped", EXPORT_FILE)
         return {}
     manifest = json.loads((folder / "manifest.json").read_text())
-    train = [json.loads(x) for x in (folder / "train.jsonl").read_text().splitlines() if x]
+    mix = manifest.get("fold", {}).get("train_outcomes")  # a fold records its whole training mix
+    train = (
+        []
+        if mix
+        else [json.loads(x) for x in (folder / "train.jsonl").read_text().splitlines() if x]
+    )
     decisions = load_decisions(EXPORT_FILE, manifest.get("extraction_version"))
     outcomes = {doc_id: d["outcome"] for doc_id, d in decisions.items()}
     case_types = {doc_id: d["case_type"] for doc_id, d in decisions.items()}
-    rows = baseline_rows(examples, outcomes, prior_outcome(train), early, case_types)
+    prior = majority(mix) if mix else prior_outcome(train)
+    rows = baseline_rows(examples, outcomes, prior, early, case_types)
     return {name: {"all": summarize(r)} for name, r in rows.items()}
 
 
@@ -276,24 +322,28 @@ def _decision_section(results: dict, baselines: dict) -> list[str]:
 
 
 def _rule_section(results: dict, calibrated: dict) -> list[str]:
-    """What the serving-time rule "high only if the retrieved precedents agree" does to each
-    system's answers: how many top routes stay "high", and how often those are right."""
+    """What the serving-time calibrations do to each system's answers (late stages): "+rule"
+    lowers "high" unless the retrieved precedents agree; "+lead" lets the precedents set every
+    likelihood and the order of the routes (ADR 0024). Shown: how often the top route is right,
+    how many top routes are rated high and how often those are right."""
     if not calibrated:
         return []
     out = [
-        '\n## Serving-time rule: "high" only if the retrieved precedents agree (late stages)\n',
-        "| system | top routes rated high | right | wrong | right, 95% over decisions |",
-        "|---|---|---|---|---|",
+        "\n## Serving-time calibrations (late stages)\n",
+        '`+rule`: "high" only if the retrieved precedents agree. `+lead`: the precedents set the '
+        "likelihoods and the order of the routes.\n",
+        "| system | top route right | top routes rated high | high: right | high: wrong "
+        "| high right, 95% over decisions |",
+        "|---|---|---|---|---|---|",
     ]
     for name, scopes in results.items():
-        for label, s in (
-            (name, scopes["all"]),
-            (f"{name}+rule", calibrated[f"{name}+rule"]["all"]),
-        ):
+        shown = [(name, scopes["all"])]
+        shown += [(f"{name}{v}", calibrated[f"{name}{v}"]["all"]) for v in ("+rule", "+lead")]
+        for label, s in shown:
             cell = s["high_precision"]
             out.append(
-                f"| {label} | {cell['n']} | {cell['hits']} | {s['high_and_wrong']} "
-                f"| {_pct(cell)} {_interval(s, 'high_precision')} |"
+                f"| {label} | {_pct(s['top_outcome_ok'])} | {cell['n']} | {cell['hits']} "
+                f"| {s['high_and_wrong']} | {_pct(cell)} {_interval(s, 'high_precision')} |"
             )
     return out + ["\nThe gate needs a top route rated high to be right 2 times in 3 (docs/05)."]
 

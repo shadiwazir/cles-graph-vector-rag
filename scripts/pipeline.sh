@@ -12,6 +12,10 @@
 #   folds       build_folds, check_dataset on every fold, folds_report (ADR 0023): rolling-origin dev
 #               folds and a locked test fold. No paid call unless FOLDS_TARGETS=generate (PAID,
 #               gated); the test fold is evaluated only with FOLDS_INCLUDE_TEST=1 and a reason
+#   folds-targets  PAID: generate the missing training targets for all folds (ceiling MAX_COST_USD,
+#               enforced inside the stage too), then check every fold and report
+#   folds-eval  PAID: OpenAI baseline on the dev folds (FOLDS_EVAL_SYSTEMS, default openai), scored
+#               per fold with the replayed calibrations, then pooled by folds_report
 #   train       train_sft   (needs a GPU; on a laptop use `train-dry`)
 #   train-dry   train_sft --dry-run: leakage re-check, token statistics, template preview
 #   eval        eval_generate with the OpenAI baseline (PAID), then eval_score
@@ -205,6 +209,43 @@ step_eval() {
   step_eval_score
 }
 
+# Generate the missing training targets of all folds (PAID, cached). The stage refuses to start when
+# its estimate is above the ceiling and stops starting calls when the spend passes it.
+step_folds_targets() {
+  [[ "${CONFIRM_PAID:-}" == "1" ]] || die "paid step not confirmed: rerun with CONFIRM_PAID=1" 3
+  FOLDS_TARGETS=generate FOLDS_MAX_COST_USD="$MAX_COST_USD" run_stages build_folds
+  local root fold
+  root="$(ls -1dt artifacts/folds/*/ | head -1)"
+  for fold in "$root"*/; do
+    [[ -f "$fold/manifest.json" ]] && DATASET_DIR="$fold" run_stages check_dataset
+  done
+  FOLDS_DIR="$root" run_stages folds_report
+  snapshot artifacts/folds
+}
+
+# Systems (EVAL_SYSTEM names from eval/systems.yaml) generated and scored on every dev fold. Model
+# outputs live in <fold>/eval/<system>/; the test fold is never evaluated here.
+step_folds_eval() {
+  local root fold systems system
+  root="$(ls -1dt artifacts/folds/*/ | head -1)"
+  systems="${FOLDS_EVAL_SYSTEMS:-openai}"
+  for fold in "$root"dev*/; do
+    for system in $systems; do
+      DATASET_DIR="$fold" EVAL_OUT_DIR="$fold/eval" EVAL_SYSTEM="$system" paid_gate eval_generate
+    done
+  done
+  for fold in "$root"dev*/; do
+    for system in $systems; do
+      DATASET_DIR="$fold" EVAL_OUT_DIR="$fold/eval" EVAL_SYSTEM="$system" \
+        ALLOW_EXTERNAL_GENERATOR=true run_stages eval_generate
+    done
+    DATASET_DIR="$fold" EVAL_OUT_DIR="$fold/eval" EVAL_METRICS_FILE="$fold/eval_metrics.json" \
+      run_stages eval_score
+  done
+  FOLDS_DIR="$root" run_stages folds_report
+  snapshot artifacts/folds
+}
+
 # Score, then version the outputs and check for regressions (exit 5 on violations).
 step_eval_score() {
   run_stages eval_score
@@ -288,6 +329,8 @@ case "$STEP" in
   data) step_data ;;
   dataset) step_dataset ;;
   folds) step_folds ;;
+  folds-targets) step_folds_targets ;;
+  folds-eval) step_folds_eval ;;
   train) step_train ;;
   train-dry) step_train_dry ;;
   eval) step_eval ;;
@@ -303,6 +346,6 @@ case "$STEP" in
   all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
   status) step_status ;;
   reset) step_reset ;;
-  *) sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 say "step $STEP done (logs: $LOG_DIR)"

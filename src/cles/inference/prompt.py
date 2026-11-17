@@ -3,17 +3,31 @@
 import json
 
 from cles.domain.pack import DomainPack
+from cles.inference.evidence import render_precedents
 from cles.retrieval.types import ContextPack
 
 MAX_FACT_ROWS = 15  # graph rows per template shown to the model
 
 
 def build_messages(
-    pack: DomainPack, case_text: str, question: str, context: ContextPack
+    pack: DomainPack,
+    case_text: str,
+    question: str,
+    context: ContextPack,
+    precedent_outcomes: list[str] | None = None,
 ) -> list[dict[str, str]]:
+    """The runtime prompt. `precedent_outcomes` are the outcomes of the retrieved decisions; when
+    given, the prompt states them (computed by code) because the likelihood of a route follows
+    from them (ADR 0024). None leaves the section out."""
     system = (
         f"{pack.advice_prompt}\n\nReturn one JSON object that matches this JSON Schema:\n"
         f"{json.dumps(pack.advice_schema)}"
+    )
+    precedent_section = (
+        ""
+        if precedent_outcomes is None
+        else "PRECEDENT OUTCOMES (computed from the retrieved decisions; the likelihood of a "
+        f"route follows from them):\n{render_precedents(precedent_outcomes)}\n\n"
     )
     user = (
         f"CASE (as described by the lawyer):\n{case_text}\n\n"
@@ -21,6 +35,7 @@ def build_messages(
         f"RETRIEVED PASSAGES (cite only these; use the case id and paragraph shown):\n"
         f"{render_passages(context)}\n\n"
         f"GRAPH FACTS (structured, from earlier decisions):\n{render_graph(context)}\n\n"
+        f"{precedent_section}"
         f"Retrieval found {context.evidence_strength} evidence."
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

@@ -18,6 +18,7 @@ from pathlib import Path
 from cles.config import ConfigError, get_settings
 from cles.domain.pack import load_pack
 from cles.evaluation.baselines import baseline_rows, load_decisions, majority, summarize
+from cles.evaluation.scoring import aggregate
 from cles.extraction.export import EXPORT_FILE
 from cles.lineage import git_commit
 from cles.stage import StageContext, stage_main
@@ -47,17 +48,41 @@ def fold_rows(folder: Path, decisions: dict[str, dict], early: set[str]) -> dict
     return baseline_rows(examples, outcomes, prior, early, case_types)
 
 
+def model_rows(folder: Path) -> dict[str, list[dict]]:
+    """Scored rows of every system (and replayed calibration) that `eval_score` wrote for one
+    fold, from <fold>/eval/report.json; {} when the fold has no model outputs yet. Systems that
+    did not answer every example of the fold are left out: a partial fold must not be pooled as
+    if it were complete."""
+    report = folder / "eval" / "report.json"
+    if not report.is_file():
+        return {}
+    data = json.loads(report.read_text())
+    rows = {**data.get("rows", {}), **data.get("variant_rows", {})}
+    eval_file = folder / "eval.jsonl"
+    if eval_file.is_file():  # a system that answered only part of the fold is left out
+        expected = sum(1 for line in eval_file.read_text().splitlines() if line)
+        rows = {name: r for name, r in rows.items() if len(r) >= expected}
+    return rows
+
+
+def _summary(name: str, rows: list[dict]) -> dict:
+    """Baselines have their own summary; scored model rows use the evaluation aggregate."""
+    return summarize(rows) if name.startswith("baseline_") else aggregate(rows)["all"]
+
+
 def summarize_scopes(per_fold: dict[str, dict[str, list[dict]]]) -> dict[str, dict]:
     """{predictor: {scope: summary}} with scopes: each fold, dev_pooled, dev_pooled_<type>."""
     names = sorted({p for rows in per_fold.values() for p in rows})
     results: dict[str, dict] = {}
     for name in names:
-        scopes = {fold: summarize(rows[name]) for fold, rows in per_fold.items() if name in rows}
+        scopes = {
+            fold: _summary(name, rows[name]) for fold, rows in per_fold.items() if name in rows
+        }
         pooled = [r for rows in per_fold.values() for r in rows.get(name, [])]
-        scopes["dev_pooled"] = summarize(pooled)
-        for case_type in sorted({r["case_type"] for r in pooled if r["case_type"]}):
-            sub = [r for r in pooled if r["case_type"] == case_type]
-            scopes[f"dev_pooled_{case_type}"] = summarize(sub)
+        scopes["dev_pooled"] = _summary(name, pooled)
+        for case_type in sorted({r["case_type"] for r in pooled if r.get("case_type")}):
+            sub = [r for r in pooled if r.get("case_type") == case_type]
+            scopes[f"dev_pooled_{case_type}"] = _summary(name, sub)
         results[name] = scopes
     return results
 
@@ -99,6 +124,7 @@ def markdown(root: Path, plan: dict, results: dict, evaluated: list[str]) -> str
     for name, scopes in results.items():
         cells = [(_cell(scopes[c]) + _interval(scopes[c])) if c in scopes else "-" for c in cols]
         out.append(f"| {name} | " + " | ".join(cells) + " |")
+    out += _calibration_table(results)
     same = results.get("baseline_precedent_same_type", {}).get("dev_pooled", {})
     if same.get("coverage") is not None:
         out.append(
@@ -106,6 +132,42 @@ def markdown(root: Path, plan: dict, results: dict, evaluated: list[str]) -> str
             f"{same['coverage']:.0%} of the late-stage examples (otherwise it predicts nothing)."
         )
     return "\n".join(out) + "\n"
+
+
+def _calibration_table(results: dict) -> list[str]:
+    """Pooled dev folds: how many top routes a model rates "high" and how often those are right
+    (the acceptance gate asks for 2 times in 3), next to its structure and citation scores."""
+    models = {n: s["dev_pooled"] for n, s in results.items() if "high_precision" in s["dev_pooled"]}
+    if not models:
+        return []
+    out = [
+        "",
+        "Models, pooled over the dev folds (late stages for the top route):",
+        "",
+        "| system | top rated high | high: right | high right [95% over decisions] "
+        "| schema valid | citations failing |",
+        "|---|---|---|---|---|---|",
+    ]
+    for name, s in models.items():
+        high = s["high_precision"]
+        valid = s["valid_schema"]["rate"]
+        failing = s["citation_failure_rate"]
+        out.append(
+            f"| {name} | {high['n']} | {high['hits']} "
+            f"| {_pct_cell(high)}{_ci(s, 'high_precision')} "
+            f"| {'n/a' if valid is None else f'{valid:.0%}'} "
+            f"| {'n/a' if failing is None else f'{failing:.1%}'} |"
+        )
+    return out
+
+
+def _pct_cell(cell: dict) -> str:
+    return "n/a" if cell["rate"] is None else f"{cell['rate']:.0%}"
+
+
+def _ci(summary: dict, key: str) -> str:
+    low, high = summary.get(f"{key}_low"), summary.get(f"{key}_high")
+    return "" if low is None else f" [{low:.0%} to {high:.0%}]"
 
 
 def log_test_use(settings, run_id: str, root: Path) -> None:
@@ -137,6 +199,8 @@ def run(ctx: StageContext) -> dict:
     decisions = load_decisions(EXPORT_FILE, version)
     early = set(pack.training.early_stages)
     per_fold = {n: fold_rows(root / n, decisions, early) for n in evaluated}
+    for n in evaluated:  # models and calibrations, when the fold has been scored
+        per_fold[n] |= model_rows(root / n)
     results = summarize_scopes(per_fold)
     summary = {
         "folds": root.name,

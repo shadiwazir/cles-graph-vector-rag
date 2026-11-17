@@ -221,3 +221,23 @@ def test_precedent_outcomes_use_the_latest_extraction_and_skip_missing(
     outcomes = advisor._precedent_outcomes([*ids, "no-such-decision"])
     assert 1 <= len(outcomes) <= len(set(ids)) and all(isinstance(o, str) for o in outcomes)
     assert advisor._precedent_outcomes([]) == []
+
+
+def test_lead_mode_orders_routes_and_rates_them_from_the_precedents(
+    conn, embedder, pack, settings, monkeypatch
+):
+    lead = settings.model_copy(update={"precedent_lead_enabled": True})
+    advice = make_advice(conn)
+    first, second = advice["routes"][0], dict(advice["routes"][0])
+    first.update(name="Allowed", expected_outcome="appeal_allowed", likelihood="high")
+    second.update(name="Dismissed", expected_outcome="appeal_dismissed", likelihood="low")
+    advice["routes"] = [first, second]
+    advisor = build(conn, embedder, pack, lead, FakeGenerator(advice))
+    outcomes = ["appeal_dismissed", "appeal_dismissed", "appeal_dismissed"]
+    monkeypatch.setattr(advisor, "_precedent_outcomes", lambda ids: outcomes)
+    response = advisor.advise(AdviceRequest(CASE, QUESTION))
+    routes = response.advice["routes"]
+    assert [r["name"] for r in routes] == ["Dismissed", "Allowed"]  # the evidence leads
+    assert routes[1]["likelihood"] == "low"  # no precedent backs it, whatever the model said
+    assert routes[0]["likelihood"] in ("medium", "high")  # unanimous, then capped by the evidence
+    assert any("ordered by the outcomes" in w for w in response.warnings)

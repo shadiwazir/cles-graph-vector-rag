@@ -1,6 +1,7 @@
 """Mapping logic is tested without Neo4j; the writer test needs the Compose Neo4j."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -49,9 +50,14 @@ def driver():
         drv.verify_connectivity()
     except Exception:
         pytest.skip("Neo4j not available")
-    ensure_schema(drv, PACK.graph)
     with drv.session() as s:
-        s.run("MATCH (n) DETACH DELETE n")
+        nodes = s.run("MATCH (n) RETURN count(n)").single()[0]
+    if nodes and os.environ.get("TEST_NEO4J_WIPE") != "1":
+        # These tests empty the graph. On the project's own Neo4j that would destroy the loaded
+        # decisions (it happened once), so they run only on an empty or throwaway instance.
+        drv.close()
+        pytest.skip(f"Neo4j holds {nodes} nodes; set TEST_NEO4J_WIPE=1 to let the tests wipe it")
+    ensure_schema(drv, PACK.graph)
     yield drv
     with drv.session() as s:
         s.run("MATCH (n) DETACH DELETE n")

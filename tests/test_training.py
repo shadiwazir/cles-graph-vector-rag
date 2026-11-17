@@ -1,4 +1,6 @@
 import json
+import time
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -149,9 +151,11 @@ class Client:
 
 def test_generate_target_retries_with_feedback_then_caps_likelihood():
     bad, good = advice("appeal_dismissed", ()), advice()
-    out = generate_target(Client(bad, good), [{"role": "user", "content": "x"}], PACK, spec())
+    unanimous = replace(spec(), precedent_outcomes=("appeal_allowed", "appeal_allowed"))
+    out = generate_target(Client(bad, good), [{"role": "user", "content": "x"}], PACK, unanimous)
     assert out.status == "ok" and out.input_tokens == 10
-    assert out.result["routes"][0]["likelihood"] == "medium"  # capped: evidence is moderate
+    # the precedents agree (high), then the cap for moderate evidence lowers it
+    assert out.result["routes"][0]["likelihood"] == "medium"
     assert out.result["evidence_strength"] == "moderate"
 
 
@@ -440,3 +444,56 @@ def test_context_dates_cover_decisions_without_a_valid_extraction():
             return [("2025 ONCA 897", date(2025, 11, 3)), ("d1", date(2026, 1, 2))]
 
     assert document_dates(Conn()) == {"2025 ONCA 897": "2025-11-03", "d1": "2026-01-02"}
+
+
+def test_late_stage_target_may_list_the_real_path_anywhere_but_must_include_it():
+    two = advice("appeal_dismissed", ())  # a wrong first route
+    two["routes"].append(advice()["routes"][0])  # the real path as the second route
+    assert check_target(two, spec()) == []
+    only_wrong = advice("appeal_dismissed", ())
+    problems = check_target(only_wrong, spec())
+    assert any("one route must have expected_outcome" in p for p in problems)
+
+
+def test_prompt_states_the_precedent_outcomes_and_the_ablation_blanks_them():
+    from cles.evaluation.generate import strip_context
+    from cles.inference.prompt import build_messages
+
+    items, _, _ = prepared()
+    context = items[0].context
+    with_outcomes = build_messages(PACK, "case text", "a question?", context, ["a", "a", "b"])
+    text = with_outcomes[1]["content"]
+    assert "PRECEDENT OUTCOMES" in text and "a: 2, b: 1 (of 3 retrieved decisions)" in text
+    assert "PRECEDENT OUTCOMES" not in build_messages(PACK, "c", "q?", context)[1]["content"]
+    stripped = strip_context(text)
+    assert "a: 2" not in stripped and "no outcome known" in stripped
+    assert stripped.endswith("Retrieval found weak evidence.")
+
+
+def test_target_generation_stops_starting_calls_after_the_spend_ceiling(monkeypatch):
+    from types import SimpleNamespace
+
+    from cles.config import Settings
+    from cles.llm.structured import StructuredResult
+    from cles.training import build_dataset
+
+    calls, saved = [], []
+
+    def fake_generate(client, messages, pack, spec):
+        time.sleep(0.05)  # a real call takes seconds; instant fakes would all finish first
+        calls.append(spec)
+        return StructuredResult("ok", {"routes": []}, 100, 100)
+
+    monkeypatch.setattr(build_dataset, "make_client", lambda settings: object())
+    monkeypatch.setattr(build_dataset, "generate_target", fake_generate)
+    monkeypatch.setattr(build_dataset, "estimate_cost", lambda *args: 1.0)  # 1 USD per call
+    monkeypatch.setattr(build_dataset, "save_target", lambda conn, item, *rest: saved.append(item))
+    todo = [SimpleNamespace(target_messages=[], spec=i, example_id=f"e{i}") for i in range(12)]
+    settings = Settings(_env_file=None, llm_concurrency=1)
+    spent = build_dataset._generate_missing(None, todo, None, settings, "m", max_spend=2.5)
+    assert 3.0 <= spent <= 5.0 and len(calls) < 12  # stopped well before the 12 calls
+    assert len(saved) == len(calls)  # whatever ran is saved, so a rerun continues from the cache
+    calls.clear()
+    saved.clear()
+    full = build_dataset._generate_missing(None, todo, None, settings, "m")
+    assert full == 12.0 and len(calls) == 12  # without a ceiling everything runs

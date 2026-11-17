@@ -155,6 +155,14 @@ def test_family_candidates_cross_the_split_only_and_ignore_the_state_side():
     split = {"a": "train", "b": "train", "c": "eval", "d": "eval"}
     found = family_candidates(parties, split)
     assert [f["docs"] for f in found] == [["a", "c"], ["b", "c"]]  # not a-b (same side)
+    # a repeat player (a party in many decisions) is not a case family; the pair with the most
+    # shared names comes first
+    parties = {"a": {"bank", "x", "y"}, "b": {"bank"}, "c": {"bank", "x", "y"}, "d": {"bank"}}
+    split = {"a": "train", "b": "train", "c": "eval", "d": "eval"}
+    assert family_candidates(parties, split, max_party_decisions=3) == [
+        {"docs": ["a", "c"], "shared": ["x", "y"]}
+    ]
+    assert len(family_candidates(parties, split)) == 4  # without the limit the bank links them
 
 
 def _advice(stage, *routes):

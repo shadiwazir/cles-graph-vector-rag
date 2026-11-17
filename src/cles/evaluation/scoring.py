@@ -35,6 +35,7 @@ def score_answer(
     return {
         "example_id": example["example_id"],
         "doc_id": example["doc_id"],
+        "case_type": example.get("case_type"),
         "stage": example["stage"],
         "outcome": truth,
         "parsed": advice is not None,

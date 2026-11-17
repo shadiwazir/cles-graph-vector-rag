@@ -47,7 +47,7 @@ def run(ctx: StageContext) -> dict:
     return summary
 
 
-def _family_candidates(pack, manifest: dict, examples: list[dict]) -> list[dict] | str:
+def _family_candidates(pack, manifest: dict, examples: list[dict]) -> dict | str:
     """Decisions that share a party across the split, from the versioned extraction export."""
     if not EXPORT_FILE.is_file():
         return f"not checked: {EXPORT_FILE} does not exist"
@@ -64,7 +64,8 @@ def _family_candidates(pack, manifest: dict, examples: list[dict]) -> list[dict]
             pack.training.family_ignore_party_kinds,
             pack.training.family_ignore_name_patterns,
         )
-    return family_candidates(parties, split_by_doc)
+    found = family_candidates(parties, split_by_doc, pack.training.family_max_party_decisions)
+    return {"count": len(found), "strongest": found[:5]}
 
 
 if __name__ == "__main__":

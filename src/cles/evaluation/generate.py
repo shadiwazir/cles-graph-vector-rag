@@ -47,14 +47,16 @@ def load_system(settings: Settings) -> dict:
 
 
 _PASSAGES = re.compile(r"(RETRIEVED PASSAGES[^\n]*\n).*?(\n\nGRAPH FACTS)", re.S)
-_GRAPH = re.compile(r"(GRAPH FACTS[^\n]*\n).*?(\n\nRetrieval found)", re.S)
+_GRAPH = re.compile(r"(GRAPH FACTS[^\n]*\n).*?(\n\n(?:PRECEDENT OUTCOMES|Retrieval found))", re.S)
+_PRECEDENTS = re.compile(r"(PRECEDENT OUTCOMES[^\n]*\n).*?(\n\nRetrieval found)", re.S)
 
 
 def strip_context(user_message: str) -> str:
-    """The same prompt without retrieval: no passages, no graph facts, weak evidence. For the
-    baseline 'fine-tuned model without retrieval' (INSTRUCTIONS 14)."""
+    """The same prompt without retrieval: no passages, no graph facts, no precedent outcomes, weak
+    evidence. For the baseline 'fine-tuned model without retrieval' (INSTRUCTIONS 14)."""
     text = _PASSAGES.sub(r"\1(none found)\2", user_message)
     text = _GRAPH.sub(r"\1(none)\2", text)
+    text = _PRECEDENTS.sub(r"\1(no outcome known for the retrieved decisions)\2", text)
     return re.sub(r"Retrieval found \w+ evidence\.", "Retrieval found weak evidence.", text)
 
 
@@ -109,9 +111,29 @@ def run(ctx: StageContext) -> dict:
         "served": lambda: _served_generator(settings, system),
         "hf": lambda: _hf_generator(settings, system),
     }[system["backend"]]()
-    cost = 0.0
+    cost, failed = write_rows(out_path, generator(todo), settings)
+    if system["backend"] in ("openai", "served"):
+        summary["cost_usd"] = cost
+    if failed:  # the answers that did arrive are saved; the failed ones are retried on a rerun
+        raise RuntimeError(
+            f"{len(failed)} of {len(todo)} requests failed and were not saved; rerun to retry "
+            f"them (first error: {failed[0]['error'][:200]})"
+        )
+    return summary
+
+
+def write_rows(out_path: Path, rows, settings: Settings) -> tuple[float, list[dict]]:
+    """Append every answer to the cache file as it arrives; returns (cost, failed requests).
+
+    A request that failed (no credit, a timeout) has no answer: it is not written, because a
+    cached empty answer would be skipped on a rerun and scored as a wrong one. An answer that
+    arrived but is invalid is written (that is a result)."""
+    cost, failed = 0.0, []
     with out_path.open("a") as out:
-        for row in generator(todo):
+        for row in rows:
+            if "error" in row:
+                failed.append(row)
+                continue
             out.write(json.dumps(row) + "\n")
             out.flush()
             cost += (
@@ -123,9 +145,7 @@ def run(ctx: StageContext) -> dict:
                 )
                 or 0.0
             )
-    if system["backend"] in ("openai", "served"):
-        summary["cost_usd"] = cost
-    return summary
+    return cost, failed
 
 
 def _openai_generator(settings: Settings, system: dict):
@@ -137,9 +157,9 @@ def _openai_generator(settings: Settings, system: dict):
         try:
             reply = client.complete_json(prompt_of(e))
             text, tin, tout = reply.text, reply.input_tokens, reply.output_tokens
-        except Exception as exc:  # recorded as an invalid answer, not a crash
+        except Exception as exc:  # no answer: reported, not cached, retried on a rerun
             log.warning("generation failed for %s: %s", e["example_id"], exc)
-            text, tin, tout = "", 0, 0
+            return {"example_id": e["example_id"], "error": str(exc)}
         return _row(e, text, tin, tout, started, client.model)
 
     def generate(examples: list[dict]):
@@ -177,9 +197,9 @@ def _served_generator(settings: Settings, system: dict):
             usage = reply.usage
             text = reply.choices[0].message.content or ""
             tin, tout = (usage.prompt_tokens, usage.completion_tokens) if usage else (0, 0)
-        except Exception as exc:  # recorded as an invalid answer, not a crash
+        except Exception as exc:  # no answer: reported, not cached, retried on a rerun
             log.warning("generation failed for %s: %s", e["example_id"], exc)
-            text, tin, tout = "", 0, 0
+            return {"example_id": e["example_id"], "error": str(exc)}
         return _row(e, text, tin, tout, started, settings.llm_model)
 
     def generate(examples: list[dict]):

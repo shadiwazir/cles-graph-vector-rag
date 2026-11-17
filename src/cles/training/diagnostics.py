@@ -57,16 +57,23 @@ def party_keys(
 
 
 def family_candidates(
-    parties_by_doc: dict[str, set[str]], split_by_doc: dict[str, str]
+    parties_by_doc: dict[str, set[str]],
+    split_by_doc: dict[str, str],
+    max_party_decisions: int | None = None,
 ) -> list[dict]:
-    """Pairs of decisions on different sides of the split that share a party name."""
+    """Pairs of decisions on different sides of the split that share a party name, the pairs
+    sharing the most names first. A party in more than `max_party_decisions` decisions is a
+    repeat player (an institution, a public body) and says nothing about one case: it is ignored."""
+    frequency = Counter(key for keys in parties_by_doc.values() for key in keys)
     found = []
     for a, b in itertools.combinations(sorted(parties_by_doc), 2):
-        if split_by_doc.get(a) == split_by_doc.get(b) or not (
-            split_by_doc.get(a) and split_by_doc.get(b)
-        ):
+        if not (split_by_doc.get(a) and split_by_doc.get(b)) or split_by_doc[a] == split_by_doc[b]:
             continue
-        shared = parties_by_doc[a] & parties_by_doc[b]
+        shared = {
+            key
+            for key in parties_by_doc[a] & parties_by_doc[b]
+            if max_party_decisions is None or frequency[key] <= max_party_decisions
+        }
         if shared:
             found.append({"docs": [a, b], "shared": sorted(shared)})
-    return found
+    return sorted(found, key=lambda f: (-len(f["shared"]), f["docs"]))

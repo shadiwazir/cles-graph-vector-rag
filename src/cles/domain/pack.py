@@ -157,6 +157,8 @@ class TrainingConfig(BaseModel):
     # state side, institutions, placeholder names. The rest of the parties link decisions of one
     # case family (an appeal and its retrial appeal, companion appeals of co-accused).
     family_ignore_party_kinds: list[str] = Field(default_factory=list)
+    # a party in more than this many decisions of a dataset is a repeat player, not a case family
+    family_max_party_decisions: int = 4
     family_ignore_name_patterns: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")

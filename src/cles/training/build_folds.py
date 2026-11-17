@@ -17,7 +17,7 @@ plans and estimates without calling or writing anything.
 import json
 import logging
 
-from cles.config import get_settings
+from cles.config import ConfigError, get_settings
 from cles.db import connect, recorded_run
 from cles.domain.pack import load_pack
 from cles.extraction.extractor import schema_version
@@ -82,13 +82,22 @@ def run(ctx: StageContext) -> dict:
                 conn, Embedder.from_settings(settings), GraphRetriever(driver, pack), settings
             )
             dates = document_dates(conn)  # also decisions without a valid extraction
+            outcomes = {d.doc_id: d.extraction["outcome"] for d in docs}
             cache: dict[str, Prepared] = {}  # training examples shared by the folds
             folds = []
             for fold in plan:
                 split = fold_split(docs, fold)
                 in_fold = [d for d in docs if d.doc_id in split]
                 items = prepare_examples(
-                    in_fold, split, fold.split_date, pack, retriever, ctx.limit, cache
+                    in_fold,
+                    split,
+                    fold.split_date,
+                    pack,
+                    retriever,
+                    ctx.limit,
+                    cache,
+                    outcomes,
+                    settings.precedent_rule_min_decisions,
                 )
                 for item in items:
                     item.doc_dates = dates  # dates of context documents, for the leakage check
@@ -119,33 +128,57 @@ def run(ctx: StageContext) -> dict:
             if ctx.dry_run:
                 return summary
 
-            spent = 0.0
-            if settings.folds_targets == "generate":
-                spent = _generate_missing(conn, todo, pack, settings, model)
             root = settings.folds_out_dir / ctx.run_id[:8]
-            written = []
-            for fold, _split, items, described in folds:
-                examples, dropped, missing = collect_examples(
-                    conn, items, pack, version, model, fold.split_date
-                )
-                manifest = {
-                    "run_id": ctx.run_id,
-                    "pack": pack.info.name,
-                    "pack_version": pack.info.version,
-                    "extraction_version": version,
-                    "target_model": model,
-                    "split_date": str(fold.split_date),
-                    "fold": described,
-                    "dropped_for_leakage": dict(dropped),
-                    "missing_targets": missing,
-                    "cost_usd_this_run": spent,
-                }
-                counts = write_dataset(root / fold.name, examples, manifest)
-                written.append(
-                    {**described, "train": counts["train"]["examples"], "missing_targets": missing}
-                    | {"eval": counts["eval"]["examples"], "dropped": dict(dropped)}
-                )
-            (root / "plan.json").write_text(json.dumps({"folds": written}, indent=2))
+
+            def write_all(spent: float) -> list[dict]:
+                """Every fold's dataset folder and plan.json, from the targets cached so far."""
+                written = []
+                for fold, _split, items, described in folds:
+                    examples, dropped, missing = collect_examples(
+                        conn, items, pack, version, model, fold.split_date
+                    )
+                    manifest = {
+                        "run_id": ctx.run_id,
+                        "pack": pack.info.name,
+                        "pack_version": pack.info.version,
+                        "extraction_version": version,
+                        "target_model": model,
+                        "split_date": str(fold.split_date),
+                        "fold": described,
+                        "dropped_for_leakage": dict(dropped),
+                        "missing_targets": missing,
+                        "cost_usd_this_run": spent,
+                    }
+                    counts = write_dataset(root / fold.name, examples, manifest)
+                    written.append(
+                        {
+                            **described,
+                            "train": counts["train"]["examples"],
+                            "missing_targets": missing,
+                            "eval": counts["eval"]["examples"],
+                            "dropped": dict(dropped),
+                        }
+                    )
+                (root / "plan.json").write_text(json.dumps({"folds": written}, indent=2))
+                return written
+
+            spent = 0.0
+            generating = settings.folds_targets == "generate" and bool(todo)
+            if generating:  # refuse before anything is paid
+                ceiling = settings.folds_max_cost_usd
+                if ceiling <= 0:
+                    raise ConfigError("FOLDS_TARGETS=generate needs FOLDS_MAX_COST_USD (a ceiling)")
+                if est_cost is None or est_cost > ceiling:
+                    raise ConfigError(
+                        f"estimate {est_cost} USD is not within the ceiling {ceiling} USD "
+                        "(set LLM_PRICE_INPUT_PER_MTOK and LLM_PRICE_OUTPUT_PER_MTOK)"
+                    )
+            # Evaluation sets do not depend on targets: write them now, so evaluation can start
+            # while the paid targets are still being generated; rewritten when they are done.
+            written = write_all(spent)
+            if generating:
+                spent = _generate_missing(conn, todo, pack, settings, model, ceiling)
+                written = write_all(spent)
             return {**summary, "written": str(root), "folds": written, "cost_usd": spent}
     finally:
         driver.close()

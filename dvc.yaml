@@ -2,3 +2,4 @@
 # scores of the evaluation it was made with (written by the eval_score stage, committed with git).
 metrics:
   - metrics/eval.json
+  - metrics/folds.json

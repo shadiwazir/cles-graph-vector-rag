@@ -73,6 +73,14 @@ def load_docs(conn: psycopg.Connection, version: str) -> list[DocInfo]:
     return [DocInfo(doc_id, title, doc_date, result) for doc_id, title, doc_date, result in rows]
 
 
+def document_dates(conn: psycopg.Connection) -> dict[str, str]:
+    """doc_id -> date of every ingested decision, not only of those with a valid extraction:
+    retrieval can return a decision whose extraction was rejected, and the leakage rules need its
+    date."""
+    rows = conn.execute("SELECT doc_id, doc_date FROM documents WHERE doc_date IS NOT NULL")
+    return {doc_id: doc_date.isoformat() for doc_id, doc_date in rows.fetchall()}
+
+
 def prepare_examples(
     docs: list[DocInfo],
     split: dict[str, str],
@@ -80,13 +88,21 @@ def prepare_examples(
     pack: DomainPack,
     retriever: HybridRetriever,
     limit: int | None = None,
+    cache: dict[str, Prepared] | None = None,
 ) -> list[Prepared]:
+    """Examples for every stage of every document. `cache` (example_id -> Prepared) lets several
+    folds share the training examples: their context depends on the document's own date only,
+    never on the split, so it is retrieved once."""
     prepared: list[Prepared] = []
     for doc in sorted(docs, key=lambda d: (d.doc_date, d.doc_id)):
         for stage_item in doc.extraction.get("stages", []):
             stage = stage_item["stage"]
             question = pick_question(pack, stage, doc.doc_id)
             if question is None:
+                continue
+            example_id = f"{doc.doc_id}#{stage}"
+            if cache is not None and split[doc.doc_id] == "train" and example_id in cache:
+                prepared.append(cache[example_id])
                 continue
             case_text = stage_item["known_so_far"]
             # Training: older documents only. Evaluation: only documents from before the split.
@@ -107,22 +123,23 @@ def prepare_examples(
                 tuple(pack.training.early_stages),
                 tuple(pack.training.early_route_name_patterns),
             )
-            prepared.append(
-                Prepared(
-                    f"{doc.doc_id}#{stage}",
-                    doc,
-                    stage,
-                    question,
-                    case_text,
-                    as_of,
-                    split[doc.doc_id],
-                    context,
-                    base,
-                    target,
-                    spec,
-                    input_hash(target),
-                )
+            item = Prepared(
+                example_id,
+                doc,
+                stage,
+                question,
+                case_text,
+                as_of,
+                split[doc.doc_id],
+                context,
+                base,
+                target,
+                spec,
+                input_hash(target),
             )
+            prepared.append(item)
+            if cache is not None and item.split == "train":
+                cache[example_id] = item
             if limit and len(prepared) >= limit:
                 return prepared
     return prepared
@@ -163,13 +180,21 @@ def save_target(conn, item: Prepared, model: str, outcome, cost) -> None:
     conn.commit()
 
 
-def assemble(item: Prepared, advice: dict, model: str, version: str) -> dict:
-    """The JSONL record. `messages` is what the model trains on; the rest is metadata."""
+def assemble(item: Prepared, advice: dict | None, model: str, version: str) -> dict:
+    """The JSONL record. `messages` is what the model trains on; the rest is metadata. An
+    evaluation example may have no target (it is only a prompt there): `messages` then holds the
+    system and user message only."""
+    reply = (
+        [{"role": "assistant", "content": json.dumps(advice, ensure_ascii=False)}]
+        if advice is not None
+        else []
+    )
     return {
         "example_id": item.example_id,
         "doc_id": item.doc.doc_id,
         "doc_date": item.doc.doc_date.isoformat(),
         "stage": item.stage,
+        "case_type": item.doc.extraction.get("case_type"),
         "as_of": item.as_of.isoformat(),
         "split": item.split,
         "case_text": item.case_text,
@@ -182,10 +207,7 @@ def assemble(item: Prepared, advice: dict, model: str, version: str) -> dict:
         "remedies": list(item.spec.remedies),
         "target_model": model,
         "extraction_version": version,
-        "messages": [
-            *item.base_messages,
-            {"role": "assistant", "content": json.dumps(advice, ensure_ascii=False)},
-        ],
+        "messages": [*item.base_messages, *reply],
     }
 
 
@@ -202,11 +224,14 @@ def run(ctx: StageContext) -> dict:
             graph = GraphRetriever(driver, pack)
             retriever = HybridRetriever(conn, Embedder.from_settings(settings), graph, settings)
             items = prepare_examples(docs, split, split_date, pack, retriever, ctx.limit)
-            dates = {d.doc_id: d.doc_date.isoformat() for d in docs}
+            dates = document_dates(conn)
             for item in items:
                 item.doc_dates = dates  # dates of context documents, for the leakage check
 
-            todo = [i for i in items if cached_target(conn, i, model) is None]
+            # evaluation examples are prompts only: their targets are never paid for
+            todo = [
+                i for i in items if i.split == "train" and cached_target(conn, i, model) is None
+            ]
             est_in = sum(count_tokens(m["content"]) for i in todo for m in i.target_messages)
             est_out = len(todo) * settings.extraction_output_tokens_estimate
             est_cost = estimate_cost(
@@ -263,11 +288,15 @@ def _generate_missing(conn, todo: list[Prepared], pack, settings: Settings, mode
     return spent
 
 
-def _write(conn, items, pack, settings, version, model, split_date, spent, run_id) -> dict:
+def collect_examples(
+    conn, items, pack, version, model, split_date
+) -> tuple[list[dict], Counter, int]:
+    """Assemble the examples, drop those that break a leakage rule. A training example needs its
+    target (otherwise it is counted as missing); an evaluation example does not."""
     examples, dropped, missing = [], Counter(), 0
     for item in items:
         advice = cached_target(conn, item, model)
-        if advice is None:
+        if advice is None and item.split == "train":
             missing += 1
             continue
         example = assemble(item, advice, model, version)
@@ -279,8 +308,11 @@ def _write(conn, items, pack, settings, version, model, split_date, spent, run_i
     split_problems = check_split(examples)
     if split_problems:
         raise RuntimeError("; ".join(split_problems))
+    return examples, dropped, missing
 
-    out = settings.training_out_dir / run_id[:8]
+
+def write_dataset(out, examples: list[dict], manifest: dict) -> dict:
+    """train.jsonl, eval.jsonl and manifest.json in `out`; returns the file counts."""
     out.mkdir(parents=True, exist_ok=True)
     counts = {}
     for name in ("train", "eval"):
@@ -288,6 +320,13 @@ def _write(conn, items, pack, settings, version, model, split_date, spent, run_i
         text = "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in rows)
         (out / f"{name}.jsonl").write_text(text, encoding="utf-8")
         counts[name] = {"examples": len(rows), "sha256": hashlib.sha256(text.encode()).hexdigest()}
+    (out / "manifest.json").write_text(json.dumps({**manifest, "files": counts}, indent=2))
+    return counts
+
+
+def _write(conn, items, pack, settings, version, model, split_date, spent, run_id) -> dict:
+    examples, dropped, missing = collect_examples(conn, items, pack, version, model, split_date)
+    out = settings.training_out_dir / run_id[:8]
     manifest = {
         "run_id": run_id,
         "pack": pack.info.name,
@@ -296,12 +335,11 @@ def _write(conn, items, pack, settings, version, model, split_date, spent, run_i
         "target_model": model,
         "split_date": str(split_date),
         "eval_fraction": settings.training_eval_fraction,
-        "files": counts,
         "dropped_for_leakage": dict(dropped),
         "missing_targets": missing,
         "cost_usd_this_run": spent,
     }
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    counts = write_dataset(out, examples, manifest)
     return {
         "written": str(out),
         "train": counts["train"]["examples"],

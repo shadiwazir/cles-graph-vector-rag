@@ -308,3 +308,135 @@ def test_early_stage_first_route_must_not_be_named_like_an_appeal_result():
     assert check_target(path, early) == []
     # the same name is fine once a decision exists
     assert not any("reads as" in p for p in check_target(advice(), spec()))
+
+
+def _docs_on(dates):
+    return [DocInfo(f"d{i}", f"t{i}", date.fromisoformat(d), {}) for i, d in enumerate(dates)]
+
+
+def test_plan_folds_gives_disjoint_growing_windows_with_a_final_test():
+    from datetime import timedelta
+
+    from cles.training.dataset import fold_split, plan_folds
+
+    start = date(2026, 1, 1)
+    docs = _docs_on([(start + timedelta(days=i)).isoformat() for i in range(60)])
+    folds = plan_folds(docs, window=10, dev_folds=3)
+    assert [f.name for f in folds] == ["dev1", "dev2", "dev3", "test"]
+    assert folds[-1].end_date is None and folds[0].end_date == folds[1].split_date
+    sizes = []
+    for fold in folds:
+        split = fold_split(docs, fold)
+        train = [d for d in docs if split.get(d.doc_id) == "train"]
+        evaluation = [d for d in docs if split.get(d.doc_id) == "eval"]
+        assert max(d.doc_date for d in train) < min(d.doc_date for d in evaluation)  # L4
+        assert len(evaluation) == 10
+        sizes.append(len(train))
+    assert sizes == sorted(sizes) and sizes[0] == 20  # training grows; 60 - 4 windows of 10
+    assert (
+        len({d.doc_id for f in folds for d in docs if fold_split(docs, f).get(d.doc_id) == "eval"})
+        == 40
+    )
+
+
+def test_plan_folds_keeps_same_date_decisions_together_and_rejects_tiny_corpora():
+    from cles.training.dataset import fold_split, plan_folds
+
+    dates = ["2026-01-01"] * 4 + [f"2026-02-{i:02d}" for i in range(1, 21)]
+    docs = _docs_on(dates)
+    folds = plan_folds(docs, window=5, dev_folds=2)
+    for fold in folds:
+        split = fold_split(docs, fold)
+        same_day = {split.get(d.doc_id) for d in docs if d.doc_date == date(2026, 1, 1)}
+        assert len(same_day) == 1  # never split across train and eval
+    with pytest.raises(ValueError, match="too few"):
+        plan_folds(_docs_on(["2026-01-01", "2026-01-02"]), window=5, dev_folds=3)
+    with pytest.raises(ValueError, match="same date|too small"):
+        plan_folds(_docs_on(["2026-01-01"] * 30), window=5, dev_folds=3)
+
+
+# ---- rolling-origin folds (ADR 0023) -----------------------------------------------------------
+
+
+def test_folds_share_training_examples_and_obey_every_leakage_rule():
+    from cles.training.dataset import fold_split, plan_folds
+
+    folds = plan_folds(DOCS, window=2, dev_folds=2)  # 10 documents: 2 + 2 + 2 evaluation windows
+    cache: dict = {}
+    retriever = FakeRetriever()
+    dates = {d.doc_id: d.doc_date.isoformat() for d in DOCS}
+    seen_train: dict[str, set] = {}
+    for fold in folds:
+        split = fold_split(DOCS, fold)
+        items = prepare_examples(
+            [d for d in DOCS if d.doc_id in split],
+            split,
+            fold.split_date,
+            PACK,
+            retriever,
+            None,
+            cache,
+        )
+        for item in items:
+            item.doc_dates = dates
+        examples = [example_for(i) for i in items]
+        assert all(check_example(e, PACK, fold.split_date) == [] for e in examples)
+        assert check_split(examples) == []
+        seen_train[fold.name] = {i.example_id for i in items if i.split == "train"}
+    names = [f.name for f in folds]
+    assert seen_train[names[0]] < seen_train[names[1]] < seen_train[names[2]]  # training grows
+    calls_with_cache = len(retriever.calls)
+    fresh = FakeRetriever()
+    for fold in folds:
+        split = fold_split(DOCS, fold)
+        prepare_examples(
+            [d for d in DOCS if d.doc_id in split], split, fold.split_date, PACK, fresh
+        )
+    assert calls_with_cache < len(fresh.calls)  # shared training examples are retrieved once
+
+
+def test_evaluation_example_without_a_target_is_a_prompt_only_record():
+    items, split_date, _ = prepared()
+    item = next(i for i in items if i.split == "eval")
+    bare = assemble(item, None, "fake", "v")
+    assert [m["role"] for m in bare["messages"]] == ["system", "user"]
+    assert check_example(bare, PACK, split_date) == []  # leakage rules need only the prompt
+    full = assemble(item, {"routes": []}, "fake", "v")
+    assert [m["role"] for m in full["messages"]] == ["system", "user", "assistant"]
+    assert "case_type" in full
+
+
+def test_fold_description_counts_the_training_mix_and_the_window_mix():
+    from cles.training.build_folds import describe_fold
+    from cles.training.dataset import Fold, fold_split
+
+    docs = [
+        DocInfo(f"d{i}", "t", date(2026, 1, 1 + i), {"outcome": o, "case_type": c})
+        for i, (o, c) in enumerate(
+            [
+                ("dismissed", "civil"),
+                ("allowed", "criminal"),
+                ("dismissed", "civil"),
+                ("allowed", "civil"),
+            ]
+        )
+    ]
+    fold = Fold("dev1", date(2026, 1, 3), None)
+    described = describe_fold(docs, fold, fold_split(docs, fold))
+    assert described["train_outcomes"] == {"dismissed": 1, "allowed": 1}
+    assert described["eval_decisions"] == 2 and described["eval_case_types"] == {"civil": 2}
+
+
+def test_context_dates_cover_decisions_without_a_valid_extraction():
+    """Retrieval can return a decision whose extraction was rejected; its date is still needed."""
+    from cles.training.build_dataset import document_dates
+
+    class Conn:
+        def execute(self, sql):
+            assert "FROM documents" in sql  # not from the extractions
+            return self
+
+        def fetchall(self):
+            return [("2025 ONCA 897", date(2025, 11, 3)), ("d1", date(2026, 1, 2))]
+
+    assert document_dates(Conn()) == {"2025 ONCA 897": "2025-11-03", "d1": "2026-01-02"}

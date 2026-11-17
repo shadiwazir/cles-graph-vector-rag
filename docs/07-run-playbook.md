@@ -30,6 +30,7 @@ The steps up to `train-dry` run on the laptop. `train` needs a GPU machine and i
 | `infra` | whole stack: Postgres, Neo4j, MLflow, Collector, Phoenix, Prometheus, Grafana; waits for healthy | no | Flyway migrates the schema first; turns telemetry on |
 | `data` | `ingest embed build_indexes extract graph_load record_manifest` | `extract` | gate before `extract` |
 | `dataset` | `build_dataset check_dataset` | `build_dataset` | gate before the build |
+| `folds` | `build_folds`, `check_dataset` per fold, `folds_report` | only with `FOLDS_TARGETS=generate` | rolling-origin folds (ADR 0023); cached targets only by default; the test fold stays locked unless `FOLDS_INCLUDE_TEST=1` and `FOLDS_TEST_REASON` are set (logged in `eval/test_log.jsonl`) |
 | `train-dry` | `train_sft --dry-run` | no | leakage re-check, token statistics, template preview |
 | `train` | `train_sft` | no (GPU time) | run on the GPU machine |
 | `eval` | `eval_generate` (OpenAI baseline), `eval_score` | yes | gate before generation; public decisions only |

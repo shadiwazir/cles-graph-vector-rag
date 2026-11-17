@@ -18,7 +18,13 @@ from cles.config import get_settings
 from cles.db import connect, recorded_run
 from cles.domain.pack import load_pack
 from cles.evaluation.answers import parse_answer
-from cles.evaluation.baselines import baseline_rows, load_outcomes, prior_outcome, summarize
+from cles.evaluation.baselines import (
+    baseline_rows,
+    load_decisions,
+    load_outcomes,
+    prior_outcome,
+    summarize,
+)
 from cles.evaluation.generate import load_eval_examples, read_done
 from cles.evaluation.judge import mean_faithfulness
 from cles.evaluation.scoring import aggregate, score_answer
@@ -159,8 +165,10 @@ def baseline_results(folder: Path, examples: list[dict], early: set[str]) -> dic
         return {}
     manifest = json.loads((folder / "manifest.json").read_text())
     train = [json.loads(x) for x in (folder / "train.jsonl").read_text().splitlines() if x]
-    outcomes = load_outcomes(EXPORT_FILE, manifest.get("extraction_version"))
-    rows = baseline_rows(examples, outcomes, prior_outcome(train), early)
+    decisions = load_decisions(EXPORT_FILE, manifest.get("extraction_version"))
+    outcomes = {doc_id: d["outcome"] for doc_id, d in decisions.items()}
+    case_types = {doc_id: d["case_type"] for doc_id, d in decisions.items()}
+    rows = baseline_rows(examples, outcomes, prior_outcome(train), early, case_types)
     return {name: {"all": summarize(r)} for name, r in rows.items()}
 
 

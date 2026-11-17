@@ -139,6 +139,23 @@ Rule (`inference/calibration.py: apply_precedent_rule`, fixed by principle befor
 - The gate (`high_is_reliable`, min 5 cases) becomes unmeasurable when "high" is rare, which is the intended outcome of the rule, not a pass.
 - In the product (user decision 2026-11-16): the advisor applies the rule after the evidence cap (`Advisor._precedent_outcomes` reads the latest successful extraction of each retrieved decision; `PRECEDENT_RULE_ENABLED=false` switches it off; a lowered route adds a visible warning). Tests: `tests/test_advisor.py` (agreeing and mixed precedents, switch off, outcome lookup).
 
+### Rolling-origin folds: first results, model-free predictors (2026-11-16) [ml.9] (ADR 0023)
+
+338 decisions, three dev folds (training on 195, 229 and 266 decisions; evaluation windows of 34, 37 and 33 decisions between 2026-06-24 and 2026-08-06) and a locked test fold (299 training, 39 evaluation decisions, not evaluated). Leakage rules L1 to L5 hold in every fold (0 violations, no case family across a split). No model is evaluated yet: the folds have no training targets (a rebuilt target design comes first, docs/08 step 2).
+
+Top route = real outcome, late-stage examples, 95% interval over decisions:
+
+| predictor | dev1 | dev2 | dev3 | dev pooled (about 101 decisions) | criminal | civil |
+|-----------|------|------|------|----------------------------------|----------|-------|
+| always the training majority | 69% | 69% | 45% | 61% [52 to 71] | 59% | 62% |
+| precedent vote | 67% | 64% | 47% | 60% [51 to 68] | 56% | 61% |
+| precedent vote, same case type only | 60% | 63% | 42% | 55% [47 to 64] | 52% | 60% |
+
+- The base rate drives everything: the training-majority predictor follows the dismissal rate of the window (68%, 68%, 45% dismissed), so the same system scores 45% or 69% depending on the window. A model must be judged against the majority predictor inside the same fold, not against a fixed number.
+- Retrieval adds nothing beyond the base rate for outcomes: the precedent vote (60%) equals the majority predictor (61%). Counting only same-type precedents does not help either (55%, within noise); 96% of the late-stage examples have at least one same-type precedent. So the case type does not make the evidence for the outcome better; it may still matter for remedies and reasoning, which these predictors do not test (docs/08, case-type experiments c and d).
+- Earlier numbers (12 decisions, October 2026) are not comparable: that window had 42% dismissed.
+- Run: `scripts/pipeline.sh folds`; the test fold only with `FOLDS_INCLUDE_TEST=1 FOLDS_TEST_REASON="..."` (logged in `eval/test_log.jsonl`).
+
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 
 Specified in `eval/acceptance.yaml`, checked by `scripts/pipeline.sh accept` (`accept_check`). Acceptance is **provisional**: no lawyer review is performed in this PoC, and 48 held-out examples are too few for outcome accuracy. Thresholds are set by reasoning, not tuned to a result, and tighten as data grows.

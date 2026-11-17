@@ -6,6 +6,8 @@ A fine-tuned model is only worth its cost on outcomes if it beats these:
 - `baseline_precedent`: the most common outcome among the decisions that retrieval put into the
   example's context (the earlier decisions a lawyer would be shown). Ties go to the better-ranked
   decision.
+- `baseline_precedent_same_type`: the same vote, counting only context decisions of the same case
+  type as the case (a civil case asks civil precedents). It tests whether the type matters.
 
 Both are scored exactly like a model's top route (late stages only, against the real outcome of
 the held-out decision), so they sit next to the systems in the same tables and in the acceptance
@@ -19,17 +21,32 @@ from pathlib import Path
 from cles.evaluation.statistics import cluster_bootstrap
 
 
-def load_outcomes(export_file: Path, extraction_version: str | None = None) -> dict[str, str]:
-    """doc_id -> outcome from the DVC-versioned extraction export (status ok rows only)."""
-    outcomes: dict[str, str] = {}
+def load_decisions(export_file: Path, extraction_version: str | None = None) -> dict[str, dict]:
+    """doc_id -> {outcome, case_type} from the DVC-versioned extraction export (status ok rows)."""
+    decisions: dict[str, dict] = {}
     for line in export_file.read_text().splitlines():
         row = json.loads(line)
         if row["status"] != "ok":
             continue
         if extraction_version and row["schema_version"] != extraction_version:
             continue
-        outcomes[row["doc_id"]] = row["result"]["outcome"]
-    return outcomes
+        result = row["result"]
+        decisions[row["doc_id"]] = {
+            "outcome": result["outcome"],
+            "case_type": result.get("case_type"),
+        }
+    return decisions
+
+
+def load_outcomes(export_file: Path, extraction_version: str | None = None) -> dict[str, str]:
+    """doc_id -> outcome (see `load_decisions`)."""
+    decisions = load_decisions(export_file, extraction_version)
+    return {doc_id: d["outcome"] for doc_id, d in decisions.items()}
+
+
+def majority(counts: dict[str, int]) -> str:
+    """The most common outcome of a {outcome: decisions} count (ties: alphabetical, stable)."""
+    return max(sorted(counts), key=lambda o: counts[o])
 
 
 def prior_outcome(train_examples: list[dict]) -> str:
@@ -39,14 +56,18 @@ def prior_outcome(train_examples: list[dict]) -> str:
     return Counter(per_decision.values()).most_common(1)[0][0]
 
 
-def precedent_outcome(example: dict, outcomes: dict[str, str]) -> tuple[str | None, bool]:
+def precedent_outcome(
+    example: dict, outcomes: dict[str, str], case_types: dict[str, str] | None = None
+) -> tuple[str | None, bool]:
     """(predicted outcome, unanimous) from the context decisions, in retrieval order.
 
     Unanimous means at least two context decisions have a known outcome and all agree: the case
-    where the evidence speaks with one voice, the analogue of a model rating a route "high"."""
-    ranked = [
-        outcomes[c["doc_id"]] for c in example.get("context_docs", []) if c["doc_id"] in outcomes
-    ]
+    where the evidence speaks with one voice, the analogue of a model rating a route "high".
+    With `case_types`, only context decisions of the example's own case type count."""
+    context = [c["doc_id"] for c in example.get("context_docs", []) if c["doc_id"] in outcomes]
+    if case_types is not None:
+        context = [d for d in context if case_types.get(d) == example.get("case_type")]
+    ranked = [outcomes[d] for d in context]
     if not ranked:
         return None, False
     counts = Counter(ranked)
@@ -60,27 +81,38 @@ def baseline_rows(
     outcomes: dict[str, str],
     prior: str,
     early_stages: set[str],
+    case_types: dict[str, str] | None = None,
 ) -> dict[str, list[dict]]:
-    """Per-example rows of both baselines, shaped like the model rows the scorer aggregates
-    (`top_outcome_ok` is None where routes are procedural, as for the models)."""
+    """Per-example rows of the baselines, shaped like the model rows the scorer aggregates
+    (`top_outcome_ok` is None where routes are procedural, as for the models). The same-type
+    baseline needs `case_types` and a case type on every example (datasets built before ADR 0023
+    have none, so it is left out)."""
+    typed = case_types is not None and all(e.get("case_type") for e in examples)
     rows: dict[str, list[dict]] = {"baseline_prior": [], "baseline_precedent": []}
+    if typed:
+        rows["baseline_precedent_same_type"] = []
     for e in examples:
         late = e["stage"] not in early_stages
         base = {"example_id": e["example_id"], "doc_id": e["doc_id"], "stage": e["stage"]}
-        base |= {"outcome": e["outcome"]}
-        predicted, unanimous = precedent_outcome(e, outcomes)
+        base |= {"outcome": e["outcome"], "case_type": e.get("case_type")}
         rows["baseline_prior"].append(
             base
             | {"top_outcome": prior, "top_outcome_ok": (prior == e["outcome"]) if late else None}
         )
-        rows["baseline_precedent"].append(
-            base
-            | {
-                "top_outcome": predicted,
-                "top_outcome_ok": (predicted == e["outcome"]) if late else None,
-                "unanimous": unanimous,
-            }
-        )
+        variants = {"baseline_precedent": None}
+        if typed:
+            variants["baseline_precedent_same_type"] = case_types
+        for name, types in variants.items():
+            predicted, unanimous = precedent_outcome(e, outcomes, types)
+            rows[name].append(
+                base
+                | {
+                    "top_outcome": predicted,
+                    "top_outcome_ok": (predicted == e["outcome"]) if late else None,
+                    "unanimous": unanimous,
+                    "covered": predicted is not None,
+                }
+            )
     return rows
 
 
@@ -96,6 +128,9 @@ def summarize(rows: list[dict]) -> dict:
         "top_outcome_low": cell["low"],
         "top_outcome_high": cell["high"],
     }
+    if rows and "covered" in rows[0]:  # how often the vote had any evidence to go on
+        late = [r["covered"] for r in rows if r["top_outcome_ok"] is not None]
+        summary["coverage"] = sum(late) / len(late) if late else None
     if rows and "unanimous" in rows[0]:
         sub = cluster_bootstrap(
             [(r["doc_id"], r["top_outcome_ok"] if r["unanimous"] else None) for r in rows]

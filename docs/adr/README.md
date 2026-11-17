@@ -27,3 +27,4 @@ decision gets a new ADR that supersedes the old one.
 | 0020 | One web console as the landing page of the system |
 | 0021 | Acceptance criteria as a versioned file and a stage |
 | 0022 | Heterogeneous data: the decision is the unit, and model-free baselines |
+| 0023 | Rolling-origin folds with a locked test window |

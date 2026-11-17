@@ -193,3 +193,28 @@ def test_precedent_rule_needs_enough_known_decisions_and_skips_early_stages():
     low = _advice("grounds_of_appeal", ("dismissed", "low"))
     apply_precedent_rule(low, ["allowed", "dismissed"], EARLY)  # never raises, only lowers high
     assert low["routes"][0]["likelihood"] == "low"
+
+
+def test_same_type_vote_counts_only_decisions_of_the_cases_own_type():
+    outcomes = {"c1": "dismissed", "c2": "dismissed", "v1": "allowed", "v2": "allowed"}
+    types = {"c1": "criminal", "c2": "criminal", "v1": "civil", "v2": "civil"}
+    civil = _example("z", "g", "allowed", ["c1", "c2", "v1", "v2"]) | {"case_type": "civil"}
+    plain, _ = precedent_outcome(civil, outcomes)
+    same, unanimous = precedent_outcome(civil, outcomes, types)
+    assert plain == "dismissed"  # the two criminal precedents come first and tie with civil
+    assert same == "allowed" and unanimous  # only the civil ones count
+    none = _example("z", "g", "x", ["c1"]) | {"case_type": "civil"}
+    assert precedent_outcome(none, outcomes, types) == (None, False)  # no same-type precedent
+
+
+def test_same_type_baseline_rows_differ_from_the_plain_vote_and_report_coverage():
+    outcomes = {"c1": "dismissed", "v1": "allowed", "v2": "allowed"}
+    types = {"c1": "criminal", "v1": "civil", "v2": "civil"}
+    ex = _example("z", "grounds_of_appeal", "allowed", ["c1", "v1", "v2"]) | {"case_type": "civil"}
+    only = _example("y", "grounds_of_appeal", "dismissed", ["c1"]) | {"case_type": "civil"}
+    rows = baseline_rows([ex, only], outcomes, "dismissed", EARLY, types)
+    assert rows["baseline_precedent"][0]["top_outcome"] == "allowed"
+    assert [r["top_outcome"] for r in rows["baseline_precedent_same_type"]] == ["allowed", None]
+    summary = summarize(rows["baseline_precedent_same_type"])
+    assert summary["coverage"] == 0.5
+    assert "baseline_precedent_same_type" not in baseline_rows([ex], outcomes, "x", EARLY)

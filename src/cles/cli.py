@@ -21,6 +21,8 @@ STAGES: dict[str, str] = {
     "record_manifest": "cles.manifest",
     "evaluate": "cles.evaluation.run",
     "build_dataset": "cles.training.build_dataset",
+    "build_folds": "cles.training.build_folds",
+    "folds_report": "cles.evaluation.folds",
     "check_dataset": "cles.training.check_dataset",
     "train_sft": "cles.training.train_sft",
     "eval_generate": "cles.evaluation.generate",

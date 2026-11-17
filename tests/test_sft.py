@@ -128,7 +128,9 @@ def test_dataset_manifest_fields_used_for_lineage_exist():
 
     from cles.training import build_dataset
 
-    source = inspect.getsource(build_dataset._write)
+    source = inspect.getsource(build_dataset._write) + inspect.getsource(
+        build_dataset.write_dataset
+    )
     for key in ("run_id", "pack_version", "split_date", "files"):
         assert f'"{key}"' in source
     assert json.dumps({"sha256": 1})

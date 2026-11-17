@@ -36,6 +36,55 @@ def assign_split(docs: list[DocInfo], eval_fraction: float) -> tuple[date, dict[
     return split_date, split
 
 
+@dataclass(frozen=True)
+class Fold:
+    """One evaluation window of the rolling-origin design (ADR 0023).
+
+    Training uses decisions dated before `split_date`; evaluation uses decisions dated on or after
+    `split_date` and before `end_date` (open-ended for the last window). Later decisions do not
+    exist for this fold: they would be the future."""
+
+    name: str
+    split_date: date
+    end_date: date | None
+
+
+def plan_folds(docs: list[DocInfo], window: int, dev_folds: int) -> list[Fold]:
+    """Rolling-origin folds over the decisions sorted by date: `dev_folds` development windows
+    for comparing and tuning, then a final `test` window that is never used for a choice.
+
+    Each window holds about `window` decisions (same-date decisions stay together, so a window
+    can be a little larger). Training sets grow from fold to fold, and every training decision is
+    strictly older than every evaluation decision of its fold (leakage rule L4)."""
+    n = len(docs)
+    windows = dev_folds + 1
+    if window < 1 or dev_folds < 1:
+        raise ValueError("window and dev_folds must be at least 1")
+    if n < (windows + 1) * window:
+        raise ValueError(
+            f"{n} decisions are too few for {dev_folds} dev folds and a test window of {window}"
+        )
+    dates = sorted(d.doc_date for d in docs)
+    starts = [dates[n - (windows - i) * window] for i in range(windows)]
+    if any(a >= b for a, b in zip(starts, starts[1:], strict=False)):
+        raise ValueError("the windows are too small for the number of decisions on one date")
+    names = [f"dev{i + 1}" for i in range(dev_folds)] + ["test"]
+    ends = [*starts[1:], None]
+    return [Fold(*item) for item in zip(names, starts, ends, strict=True)]
+
+
+def fold_split(docs: list[DocInfo], fold: Fold) -> dict[str, str]:
+    """doc_id -> "train" | "eval" for the decisions that exist in this fold (the rest is the
+    future and is left out)."""
+    split: dict[str, str] = {}
+    for d in docs:
+        if d.doc_date < fold.split_date:
+            split[d.doc_id] = "train"
+        elif fold.end_date is None or d.doc_date < fold.end_date:
+            split[d.doc_id] = "eval"
+    return split
+
+
 def pick_question(pack: DomainPack, stage: str, doc_id: str) -> str | None:
     """A question for this stage, chosen deterministically; None if the pack has none."""
     questions = pack.training.questions.get(stage)

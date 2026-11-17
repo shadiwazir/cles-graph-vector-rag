@@ -24,6 +24,7 @@ uv run cles run validate_pack
 3. `scripts/pipeline.sh infra`: starts Postgres and Neo4j (Flyway migrates the schema) and waits until healthy.
 4. `scripts/pipeline.sh data`: `ingest embed build_indexes`, then the **paid** gate, then `extract graph_load record_manifest`.
 5. `scripts/pipeline.sh dataset`: the **paid** gate, then `build_dataset check_dataset`.
+   For the rolling-origin evaluation (dev folds plus a locked test fold, ADR 0023) use `scripts/pipeline.sh folds`; it makes no paid call unless `FOLDS_TARGETS=generate`.
 6. `scripts/pipeline.sh train-dry`: leakage re-check, token statistics and template preview (no GPU).
 7. `scripts/pipeline.sh train` on a rented GPU machine (see `docs/06-training-runbook.md`).
 8. `scripts/pipeline.sh status`: row counts and the latest runs.

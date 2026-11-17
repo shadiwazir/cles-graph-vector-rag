@@ -9,6 +9,9 @@
 #               OpenTelemetry Collector, Phoenix, Prometheus, Grafana; wait until healthy
 #   data        ingest embed build_indexes extract graph_load record_manifest   (extract is PAID)
 #   dataset     build_dataset check_dataset                                       (build_dataset is PAID)
+#   folds       build_folds, check_dataset on every fold, folds_report (ADR 0023): rolling-origin dev
+#               folds and a locked test fold. No paid call unless FOLDS_TARGETS=generate (PAID,
+#               gated); the test fold is evaluated only with FOLDS_INCLUDE_TEST=1 and a reason
 #   train       train_sft   (needs a GPU; on a laptop use `train-dry`)
 #   train-dry   train_sft --dry-run: leakage re-check, token statistics, template preview
 #   eval        eval_generate with the OpenAI baseline (PAID), then eval_score
@@ -179,6 +182,21 @@ step_dataset() {
   snapshot artifacts/datasets
 }
 
+# Rolling-origin folds (ADR 0023). Default: no paid call, only cached targets are used. With
+# FOLDS_TARGETS=generate the missing training targets are paid for, behind the paid gate. The test
+# fold stays locked unless FOLDS_INCLUDE_TEST=1 and FOLDS_TEST_REASON are given (it is logged).
+step_folds() {
+  [[ "${FOLDS_TARGETS:-cached}" == "generate" ]] && paid_gate build_folds
+  run_stages build_folds
+  local root fold
+  root="$(ls -1dt artifacts/folds/*/ | head -1)"
+  for fold in "$root"*/; do
+    [[ -f "$fold/manifest.json" ]] && DATASET_DIR="$fold" run_stages check_dataset
+  done
+  FOLDS_DIR="$root" run_stages folds_report
+  snapshot artifacts/folds
+}
+
 # Baseline answers from the configured LLM on the held-out examples. The examples are public
 # decisions, so the external-generator guard is lifted for this step only.
 step_eval() {
@@ -269,6 +287,7 @@ case "$STEP" in
   infra) step_infra ;;
   data) step_data ;;
   dataset) step_dataset ;;
+  folds) step_folds ;;
   train) step_train ;;
   train-dry) step_train_dry ;;
   eval) step_eval ;;
@@ -284,6 +303,6 @@ case "$STEP" in
   all) step_preflight; step_infra; step_data; step_dataset; step_train_dry ;;
   status) step_status ;;
   reset) step_reset ;;
-  *) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 say "step $STEP done (logs: $LOG_DIR)"

@@ -90,6 +90,18 @@ class Settings(BaseSettings):
     training_eval_fraction: float = 0.1  # newest share of documents held out for evaluation
     training_out_dir: Path = Path("artifacts/datasets")
     dataset_dir: Path | None = None  # dataset to check; default: the newest in training_out_dir
+    # Rolling-origin folds (ADR 0023): dev windows for choices, a final test window never used
+    # for a choice. "cached" uses only targets that already exist (no paid call).
+    fold_window: int = 35  # decisions per evaluation window
+    fold_dev_count: int = 3
+    folds_out_dir: Path = Path("artifacts/folds")
+    folds_targets: Literal["cached", "generate"] = "cached"
+    folds_dir: Path | None = None  # folds to evaluate; default: the newest in folds_out_dir
+    folds_metrics_file: Path = Path("metrics/folds.json")  # git-tracked, for `dvc metrics`
+    # The test fold is never used for a choice. Evaluating it needs a reason and is logged.
+    folds_include_test: bool = False
+    folds_test_reason: str = ""
+    test_log_file: Path = Path("eval/test_log.jsonl")  # git-tracked
 
     # Project
     domain_pack: str = "legal_ca_on"

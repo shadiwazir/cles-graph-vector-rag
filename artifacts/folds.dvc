@@ -1,0 +1,6 @@
+outs:
+- md5: 05b6d5febf538c34594ff9f045bb7f45.dir
+  size: 9852054
+  nfiles: 15
+  hash: md5
+  path: folds

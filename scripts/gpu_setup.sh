@@ -79,14 +79,53 @@ case "$MODE" in
     FOLDS="${4:?usage: gpu_setup.sh pull-folds user@host port <folds-dir-name>}"
     cd "$(dirname "$0")/.."
     SSH="ssh -p $PORT -i ${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+    RSYNC=(rsync -rltz --no-owner --no-group -e "$SSH")
+    BAD=0
+    # A CPU-only image may have no rsync on the machine: then the files come over ssh with tar/cat.
+    HAS_RSYNC=$($SSH "$HOST" "command -v rsync >/dev/null && echo yes || echo no" 2>/dev/null || echo no)
+    pull_dir() {  # a folder, same relative path here as on the machine
+      mkdir -p "$1"
+      if [[ "$HAS_RSYNC" == "yes" ]]; then
+        "${RSYNC[@]}" "$HOST:$REMOTE_DIR/$1/" "$1/"
+      else
+        $SSH "$HOST" "tar -C '$REMOTE_DIR/$1' -cf - ." | tar -C "$1" -xf -
+      fi
+    }
+    pull_file() {  # a file to a path here
+      if [[ "$HAS_RSYNC" == "yes" ]]; then
+        "${RSYNC[@]}" "$HOST:$REMOTE_DIR/$1" "$2"
+      else
+        $SSH "$HOST" "cat '$REMOTE_DIR/$1'" > "$2"
+      fi
+    }
+    # Everything the run produced only on the machine comes home before the pod may be stopped:
+    # the answers of each fold, its adapter, and the MLflow file. Every item is verified.
     for fold in dev1 dev2 dev3; do
-      mkdir -p "artifacts/folds/$FOLDS/$fold/eval/finetuned"
-      rsync -rltz --no-owner --no-group -e "$SSH" \
-        "$HOST:$REMOTE_DIR/artifacts/folds/$FOLDS/$fold/eval/finetuned/" \
-        "artifacts/folds/$FOLDS/$fold/eval/finetuned/" || true
+      answers="artifacts/folds/$FOLDS/$fold/eval/finetuned"
+      pull_dir "$answers" || { echo "FAILED: answers of $fold" >&2; BAD=1; }
+      have=$(wc -l < "$answers/outputs.jsonl" 2>/dev/null || echo 0)
+      want=$(wc -l < "artifacts/folds/$FOLDS/$fold/eval.jsonl" 2>/dev/null || echo -1)
+      [[ "$have" == "$want" ]] || { echo "FAILED: $fold has $have of $want answers" >&2; BAD=1; }
+
+      adapter="$($SSH "$HOST" "cat /workspace/runs/adapter-$fold.txt 2>/dev/null" || true)"
+      if [[ -z "$adapter" ]]; then
+        echo "FAILED: no adapter path recorded on the machine for $fold" >&2; BAD=1; continue
+      fi
+      pull_dir "$adapter" || { echo "FAILED: adapter of $fold" >&2; BAD=1; }
+      remote_size=$($SSH "$HOST" "stat -c %s $REMOTE_DIR/$adapter/adapter_model.safetensors" 2>/dev/null || echo -1)
+      local_size=$(stat -c %s "$adapter/adapter_model.safetensors" 2>/dev/null || echo -2)
+      [[ "$remote_size" == "$local_size" ]] || { echo "FAILED: adapter of $fold differs ($local_size bytes here, $remote_size there)" >&2; BAD=1; }
+      echo "$fold: $have answers, adapter $adapter ($local_size bytes)"
     done
-    rsync -z --no-owner --no-group -e "$SSH" "$HOST:$REMOTE_DIR/artifacts/mlflow.db" artifacts/mlflow-gpu-folds.db || true
-    echo "pulled. MLflow runs: scripts/pipeline.sh mlflow-import --source sqlite:///artifacts/mlflow-gpu-folds.db"
+    pull_file "artifacts/mlflow.db" artifacts/mlflow-gpu-folds.db \
+      || { echo "FAILED: the MLflow file" >&2; BAD=1; }
+    if [[ "$BAD" == "0" ]]; then
+      echo "ALL PULLED AND VERIFIED: the pod can be stopped. Left on the pod on purpose: model caches, environments, checkpoints."
+      echo "Next: dvc add artifacts/runs artifacts/folds && dvc push; MLflow runs: python -m cles.mlflow_import --source sqlite:///artifacts/mlflow-gpu-folds.db (without --register)"
+    else
+      echo "NOT COMPLETE: do not stop the pod yet." >&2
+      exit 1
+    fi
     ;;
   setup)
     cd "$REMOTE_DIR"

@@ -173,3 +173,17 @@ def test_failed_requests_are_reported_and_never_cached(tmp_path):
     cost, failed = write_rows(path, iter(rows), Settings(_env_file=None))
     assert [f["example_id"] for f in failed] == ["b"]
     assert sorted(read_done(path)) == ["a", "c"]  # an invalid answer is a result; a failure is not
+
+
+def test_eval_adapter_override_replaces_the_adapter_of_the_system():
+    """A fold has its own adapter: EVAL_ADAPTER wins over eval/systems.yaml (hf backend)."""
+    import inspect
+
+    from cles.config import Settings
+    from cles.evaluation import generate
+
+    assert (
+        Settings(_env_file=None, eval_adapter="artifacts/runs/abc/adapter").eval_adapter is not None
+    )
+    assert Settings(_env_file=None).eval_adapter is None
+    assert "settings.eval_adapter" in inspect.getsource(generate._hf_generator)

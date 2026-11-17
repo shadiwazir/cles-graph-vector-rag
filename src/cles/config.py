@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     judge_model: str = "gpt-5.4-mini"  # prefer another model family than the generator
     eval_labels_file: Path = Path("eval/labels/labels.jsonl")  # human review, git-tracked
     eval_max_new_tokens: int = 2000
+    # Adapter to evaluate instead of the one in eval/systems.yaml (a fold has its own adapter)
+    eval_adapter: Path | None = None
     # "high" needs this many retrieved decisions, all agreeing (inference/calibration.py);
     # applied by the advisor unless switched off (replayed on the evaluation in docs/05)
     precedent_rule_enabled: bool = True

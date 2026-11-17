@@ -54,7 +54,15 @@ def run(ctx: StageContext) -> dict:
     summary["template_preview"] = _template_preview(train, tokenizer, cfg)
     if ctx.dry_run:
         return summary
-    return summary | _train(cfg, settings, train, eval_set, manifest, folder, ctx.run_id)
+    scored = with_target(eval_set)  # only examples that have a target can give a validation loss
+    summary["eval_examples_with_target"] = len(scored)
+    return summary | _train(cfg, settings, train, scored, manifest, folder, ctx.run_id)
+
+
+def with_target(examples: list[dict]) -> list[dict]:
+    """The examples that carry a target (system, user and assistant message). The evaluation
+    examples of a fold are prompts only, so a fold trains without a validation loss."""
+    return [e for e in examples if len(e["messages"]) == 3]
 
 
 def _check_leakage(examples: list[dict], manifest: dict, pack: DomainPack) -> None:
@@ -228,6 +236,7 @@ def _lineage(cfg: SftConfig, manifest: dict, folder: Path) -> dict:
         "raw_data_dvc_hash": dvc_hash(Path("data.dvc")) or "",
         "datasets_dvc_hash": dvc_hash(Path("artifacts/datasets.dvc")) or "",
         "dataset_run_id": manifest["run_id"],
+        "dataset_fold": (manifest.get("fold") or {}).get("name", ""),
         "dataset_train_sha256": manifest["files"]["train"]["sha256"],
         "dataset_eval_sha256": manifest["files"]["eval"]["sha256"],
         "pack_version": manifest["pack_version"],

@@ -218,7 +218,7 @@ def _hf_generator(settings: Settings, system: dict):
         import torch
         from unsloth import FastLanguageModel  # must be imported before transformers
 
-        name = system.get("adapter") or system["base_model"]
+        name = str(settings.eval_adapter or system.get("adapter") or system["base_model"])
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=name, max_seq_length=12288, load_in_4bit=True
         )

@@ -134,3 +134,17 @@ def test_dataset_manifest_fields_used_for_lineage_exist():
     for key in ("run_id", "pack_version", "split_date", "files"):
         assert f'"{key}"' in source
     assert json.dumps({"sha256": 1})
+
+
+def test_examples_without_a_target_give_no_validation_loss():
+    """The evaluation examples of a fold are prompts only (system and user message)."""
+    from cles.training.sft_data import to_prompt_completion
+    from cles.training.train_sft import with_target
+
+    prompt_only = {
+        "messages": [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
+    }
+    full = {"messages": [*prompt_only["messages"], {"role": "assistant", "content": "a"}]}
+    assert with_target([prompt_only, full, prompt_only]) == [full]
+    assert to_prompt_completion(full)["completion"] == [{"role": "assistant", "content": "a"}]
+    assert with_target([prompt_only]) == []  # the trainer then runs without an eval set

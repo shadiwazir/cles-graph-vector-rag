@@ -10,6 +10,12 @@
 #                                                 the base model plus the adapter as model "cles"
 #   scripts/gpu_setup.sh serve-wait               run on the GPU MACHINE: block until "cles" answers
 #   scripts/gpu_setup.sh wait <name>              run on the GPU MACHINE: block until the run ends
+#   scripts/gpu_setup.sh push-folds user@host port <folds-dir-name>   run on the LAPTOP: rsync repo +
+#                                                 the dev folds (never the locked test fold)
+#   scripts/gpu_setup.sh folds <folds-dir-name> <fold>...   run on the GPU MACHINE: train an adapter
+#                                                 per fold and generate its answers (gpu_folds.sh)
+#   scripts/gpu_setup.sh pull-folds user@host port <folds-dir-name>   run on the LAPTOP: fetch the
+#                                                 generated answers and the MLflow file
 #
 # `run` writes /workspace/runs/<name>.log and, when the process ends, /workspace/runs/<name>.exit
 # (the exit code). Wait on that file, never on `pgrep -f` over ssh: the ssh command line matches
@@ -39,6 +45,48 @@ case "$MODE" in
     rsync -rltz --no-owner --no-group -e "$SSH" artifacts/datasets.dvc "$HOST:$REMOTE_DIR/artifacts/"
     rsync -rltz --no-owner --no-group -e "$SSH" data.dvc "$HOST:$REMOTE_DIR/"
     echo "pushed. Next: ssh in, then: cd $REMOTE_DIR && scripts/gpu_setup.sh setup"
+    ;;
+  push-folds)
+    HOST="${2:?usage: gpu_setup.sh push-folds user@host port <folds-dir-name>}"
+    PORT="${3:?usage: gpu_setup.sh push-folds user@host port <folds-dir-name>}"
+    FOLDS="${4:?usage: gpu_setup.sh push-folds user@host port <folds-dir-name>}"
+    cd "$(dirname "$0")/.."
+    [[ -d "artifacts/folds/$FOLDS" ]] || { echo "no artifacts/folds/$FOLDS" >&2; exit 2; }
+    SSH="ssh -p $PORT -i ${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+    rsync -rltz --no-owner --no-group -e "$SSH" \
+      --exclude .venv --exclude .env --exclude data --exclude mlruns --exclude artifacts \
+      --exclude .dvc/cache --exclude .dvc/tmp --exclude __pycache__ --exclude .pytest_cache --exclude .ruff_cache --exclude .git \
+      ./ "$HOST:$REMOTE_DIR/"
+    $SSH "$HOST" "mkdir -p $REMOTE_DIR/artifacts/folds/$FOLDS"
+    # the test fold is locked: it is not even copied to the machine
+    rsync -rltz --no-owner --no-group -e "$SSH" --exclude test --exclude eval \
+      "artifacts/folds/$FOLDS/" "$HOST:$REMOTE_DIR/artifacts/folds/$FOLDS/"
+    echo "pushed code and the dev folds of $FOLDS. Next, on the machine: scripts/gpu_setup.sh folds $FOLDS dev1 dev2 dev3"
+    ;;
+  folds)
+    FOLDS="${2:?usage: gpu_setup.sh folds <folds-dir-name> <fold>...}"
+    shift 2
+    [[ $# -gt 0 ]] || { echo "usage: gpu_setup.sh folds <folds-dir-name> <fold>..." >&2; exit 2; }
+    mkdir -p /workspace/runs
+    rm -f /workspace/runs/folds.exit
+    cd "$REMOTE_DIR"
+    setsid nohup bash scripts/gpu_folds.sh "$FOLDS" "$@" < /dev/null > /workspace/runs/folds.log 2>&1 &
+    echo "started folds $* (log /workspace/runs/folds.log, marker /workspace/runs/folds.exit)"
+    ;;
+  pull-folds)
+    HOST="${2:?usage: gpu_setup.sh pull-folds user@host port <folds-dir-name>}"
+    PORT="${3:?usage: gpu_setup.sh pull-folds user@host port <folds-dir-name>}"
+    FOLDS="${4:?usage: gpu_setup.sh pull-folds user@host port <folds-dir-name>}"
+    cd "$(dirname "$0")/.."
+    SSH="ssh -p $PORT -i ${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+    for fold in dev1 dev2 dev3; do
+      mkdir -p "artifacts/folds/$FOLDS/$fold/eval/finetuned"
+      rsync -rltz --no-owner --no-group -e "$SSH" \
+        "$HOST:$REMOTE_DIR/artifacts/folds/$FOLDS/$fold/eval/finetuned/" \
+        "artifacts/folds/$FOLDS/$fold/eval/finetuned/" || true
+    done
+    rsync -z --no-owner --no-group -e "$SSH" "$HOST:$REMOTE_DIR/artifacts/mlflow.db" artifacts/mlflow-gpu-folds.db || true
+    echo "pulled. MLflow runs: scripts/pipeline.sh mlflow-import --source sqlite:///artifacts/mlflow-gpu-folds.db"
     ;;
   setup)
     cd "$REMOTE_DIR"
@@ -118,7 +166,7 @@ ENV
     echo "run $NAME exit code: $(cat "/workspace/runs/$NAME.exit")"
     ;;
   *)
-    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac

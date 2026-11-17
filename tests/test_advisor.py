@@ -177,3 +177,47 @@ def test_likelihood_is_capped_by_evidence(conn, embedder, pack, settings):
     assert response.evidence_strength == "weak"
     assert response.advice["routes"][0]["likelihood"] == "low"
     assert any("likelihood" in w and "lowered" in w for w in response.warnings)
+
+
+def _late_high_advice(conn, outcome):
+    advice = make_advice(conn)
+    advice["routes"][0].update(likelihood="high", expected_outcome=outcome)
+    return advice
+
+
+QUESTION = "The grounds of appeal are set. What outcome should we expect?"
+CASE = "The appellant was convicted at trial and appeals on grounds of misapprehended evidence."
+
+
+def test_high_needs_agreeing_precedents(conn, embedder, pack, settings, monkeypatch):
+    advisor = build(conn, embedder, pack, settings, FakeGenerator(_late_high_advice(conn, "x")))
+    outcome = "appeal_dismissed"
+    monkeypatch.setattr(advisor, "_precedent_outcomes", lambda ids: [outcome, outcome, outcome])
+    advisor._client = FakeGenerator(_late_high_advice(conn, outcome))
+    agreed = advisor.advise(AdviceRequest(CASE, QUESTION))
+    mixed_advice = _late_high_advice(conn, outcome)
+    advisor._client = FakeGenerator(mixed_advice)
+    monkeypatch.setattr(advisor, "_precedent_outcomes", lambda ids: [outcome, "appeal_allowed"])
+    mixed = advisor.advise(AdviceRequest(CASE, QUESTION))
+    if agreed.evidence_strength == "strong":  # the evidence cap alone must not explain it
+        assert agreed.advice["routes"][0]["likelihood"] == "high"
+    assert mixed.advice["routes"][0]["likelihood"] != "high"
+    assert any("do not all support" in w for w in mixed.warnings)
+
+
+def test_precedent_rule_can_be_switched_off(conn, embedder, pack, settings, monkeypatch):
+    off = settings.model_copy(update={"precedent_rule_enabled": False})
+    advisor = build(conn, embedder, pack, off, FakeGenerator(_late_high_advice(conn, "x")))
+    monkeypatch.setattr(advisor, "_precedent_outcomes", lambda ids: ["a", "b"])
+    response = advisor.advise(AdviceRequest(CASE, QUESTION))
+    assert not any("do not all support" in w for w in response.warnings)
+
+
+def test_precedent_outcomes_use_the_latest_extraction_and_skip_missing(
+    conn, embedder, pack, settings
+):
+    advisor = build(conn, embedder, pack, settings, FakeGenerator("x"))
+    ids = [r[0] for r in conn.execute("SELECT doc_id FROM extractions WHERE status='ok' LIMIT 3")]
+    outcomes = advisor._precedent_outcomes([*ids, "no-such-decision"])
+    assert 1 <= len(outcomes) <= len(set(ids)) and all(isinstance(o, str) for o in outcomes)
+    assert advisor._precedent_outcomes([]) == []

@@ -12,7 +12,7 @@ import psycopg
 
 from cles.config import Settings
 from cles.domain.pack import DomainPack
-from cles.inference.calibration import cap_likelihood
+from cles.inference.calibration import apply_precedent_rule, cap_likelihood
 from cles.inference.guard import check_generator_allowed
 from cles.inference.prompt import build_messages
 from cles.inference.verifier import CitationVerifier
@@ -72,6 +72,18 @@ class Advisor:
         self._settings = settings
         self.prompt_version = _prompt_version(pack)
 
+    def _precedent_outcomes(self, doc_ids: list[str]) -> list[str]:
+        """Outcome of each retrieved decision (latest successful extraction); a decision without
+        one is left out, so it can never count as agreement."""
+        if not doc_ids:
+            return []
+        rows = self._conn.execute(
+            """SELECT DISTINCT ON (doc_id) result->>'outcome' FROM extractions
+               WHERE status = 'ok' AND doc_id = ANY(%s) ORDER BY doc_id, created_at DESC""",
+            (doc_ids,),
+        ).fetchall()
+        return [r[0] for r in rows if r[0]]
+
     def advise(self, req: AdviceRequest) -> AdviceResponse:
         started = time.monotonic()
         request_id = new_request_id()
@@ -114,6 +126,13 @@ class Advisor:
             strength = _weaker(outcome.result.get("evidence_strength", strength), strength)
             advice["evidence_strength"] = strength
             warnings += cap_likelihood(advice, strength, self._pack.info.likelihood_caps_by_stage)
+            if self._settings.precedent_rule_enabled:
+                warnings += apply_precedent_rule(
+                    advice,
+                    self._precedent_outcomes(context.retrieved_doc_ids),
+                    set(self._pack.training.early_stages),
+                    self._settings.precedent_rule_min_decisions,
+                )
         else:
             warnings.append(f"generation failed: {outcome.error}")
         if strength == "weak":

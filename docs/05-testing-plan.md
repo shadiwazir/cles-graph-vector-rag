@@ -137,7 +137,7 @@ Rule (`inference/calibration.py: apply_precedent_rule`, fixed by principle befor
 - The rule makes "high" rarer and removes most wrong "high" routes (9 -> 3, 7 -> 3), but precision stays under the 67% gate and the intervals are very wide (for example 17% to 89% on 7 routes). At 12 decisions the effect is not statistically separable from noise.
 - Sensitivity, exploratory and not used to choose (stricter variants keep 5 to 7 routes): unanimous with at least 3 decisions 67% (4/6); at least 75% agreeing among 4 or more 71% (5/7); plurality only 54% (7/13); never "high" leaves nothing to measure. A stricter rule looks better but is the kind of tuning a 12-decision evaluation cannot support.
 - The gate (`high_is_reliable`, min 5 cases) becomes unmeasurable when "high" is rare, which is the intended outcome of the rule, not a pass.
-- Not in the product yet: the console and `/advise` still show the model's own rating (applying the rule needs the outcomes of the retrieved decisions at serving time).
+- In the product (user decision 2026-11-16): the advisor applies the rule after the evidence cap (`Advisor._precedent_outcomes` reads the latest successful extraction of each retrieved decision; `PRECEDENT_RULE_ENABLED=false` switches it off; a lowered route adds a visible warning). Tests: `tests/test_advisor.py` (agreeing and mixed precedents, switch off, outcome lookup).
 
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 

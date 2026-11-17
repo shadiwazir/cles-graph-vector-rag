@@ -246,3 +246,13 @@
 - New data: user added data/mix (328 PDFs; 93 duplicates by content of criminal_and_civil; 235 new). Ingested with DATA_DIR=data/mix (free): 235 inserted, 93 unchanged, 0 failed. Started embed + build_indexes in the background (local, free). Extraction dry run: 235 pending, 1.83M input and 0.59M output tokens (price variables unset, so no estimate; scaled about $3.1). Nothing paid has run.
 - Files affected: src/cles/inference/calibration.py, src/cles/config.py, src/cles/evaluation/score.py, tests/test_eval_statistics.py, metrics/eval.json, docs/05, docs/08, refs ml.9; database (235 new documents and chunks).
 - Next: user decides whether to run the paid steps (extract about $3, dataset about $19, then retrain and evaluate on the GPU), and whether to wire the rule into the advisor.
+
+## 2026-11-16 Approved: extraction and advisor rule
+- Done: user approved the paid extraction and the advisor wiring. Wired apply_precedent_rule into Advisor (setting precedent_rule_enabled, default on; outcomes of retrieved decisions from the extractions table; visible warning when a route is lowered); 3 tests; docs/05 and docs/08 updated. Started `scripts/pipeline.sh data` with DATA_DIR=data/mix, LLM prices 0.75/4.50, CONFIRM_PAID=1, MAX_COST_USD=6 (estimate 4.02 USD) in the background: extract, export, DVC snapshot, graph load, manifest.
+- Next: when the data step ends, check the result and cost; user decides question 3 (plain split vs rolling folds with locked test) before the dataset is rebuilt.
+
+## 2026-11-16 Extraction of the new PDFs done
+- Done: `pipeline.sh data` with DATA_DIR=data/mix: extract 233 ok, 2 invalid, 0 failed, cost 3.03 USD (estimate 4.02, ceiling 6); export (386 ok rows), graph load (340 decisions), manifest. The 2 invalid (2025 ONCA 897, 2026 ONCA 528) were rejected by the hindsight guard (decision wording in a pre-decision stage) and stay excluded. DVC snapshot of data, exports, eval and runs pushed to the local remote; manifest re-recorded with the new raw hash (0af4ad73...). 196 tests pass.
+- Corpus now: 340 decisions with extractions; outcomes 229 dismissed (67%), 56 allowed, 53 allowed in part, 2 other; criminal 185, civil 152 (it was 93 and 14 before: the corpus is now much more civil); by year 2026: 159, 2025: 67, 2024: 35, 2023: 41, earlier 38.
+- Files affected: artifacts/exports.dvc, artifacts/eval.dvc, data.dvc (commit to pin), database and graph (new decisions), refs.
+- Next: user decides question 3 (plain split vs rolling folds with a locked test set); the dataset step (about 19 USD, needs approval) comes after that decision.

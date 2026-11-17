@@ -77,7 +77,9 @@ class Settings(BaseSettings):
     judge_model: str = "gpt-5.4-mini"  # prefer another model family than the generator
     eval_labels_file: Path = Path("eval/labels/labels.jsonl")  # human review, git-tracked
     eval_max_new_tokens: int = 2000
-    # "high" needs this many retrieved decisions, all agreeing (inference/calibration.py)
+    # "high" needs this many retrieved decisions, all agreeing (inference/calibration.py);
+    # applied by the advisor unless switched off (replayed on the evaluation in docs/05)
+    precedent_rule_enabled: bool = True
     precedent_rule_min_decisions: int = 2
     eval_batch_size: int = 4
     # Hosts we control that may receive case text besides localhost (for example a rented GPU

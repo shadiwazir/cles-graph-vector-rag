@@ -178,6 +178,28 @@ Per fold, top route right: openai 57%, 59%, 42%; openai + lead 64%, 64%, 44%; ma
 - Cost of the baseline: 4.30 USD (the third fold was retried after the account ran out of credits; failed requests are no longer cached).
 - `PRECEDENT_LEAD_ENABLED` stays off until a fine-tuned model has been replayed the same way.
 
+### Fine-tuned models per fold, three dev folds (2026-11-17) [ml.9] (ADR 0024)
+
+One adapter per dev fold, trained on the fold's training set with the new targets (evidence-computed likelihoods, real path as one route among others) and evaluated on the fold's window; same prompts as the OpenAI baseline. Pooled over 104 decisions, 201 late-stage examples, 95% intervals over decisions:
+
+| system | top route right | top routes rated high | high: right | schema valid | citations failing |
+|--------|-----------------|-----------------------|-------------|--------------|-------------------|
+| training majority (no model) | 61% [52 to 71] | | | | |
+| precedent vote (no model) | 60% [51 to 68] | | | | |
+| **fine-tuned** | 61% [51 to 70] | 20 | **95% (19/20) [83 to 100]** | **99%** | 5.2% |
+| fine-tuned + lead | 59% [51 to 68] | 20 | 95% (19/20) | 99% | 5.2% |
+| openai (raw) | 53% [44 to 62] | 110 | 58% (64/110) [47 to 69] | 77% | 7.5% |
+| openai + lead | 58% [50 to 66] | 21 | 90% (19/21) [75 to 100] | 77% | 7.5% |
+
+Per fold: top route right 67%, 69%, 45% (training majority 69%, 69%, 45%); high right 8/8, 6/6, 5/6. By case type: criminal 59%, civil 61%.
+
+- Calibration is learned: the fine-tuned model rates 20 top routes high (10% of late-stage examples) and 19 are right, where the raw OpenAI model rates 110 and is right 58% of the time. The gate (2 in 3, at least 5 cases) is met with a lower bound of 83%. Applying the evidence-led serving on top changes nothing for it; it lowers the top route (61% to 59%), so `PRECEDENT_LEAD_ENABLED` stays off for the fine-tuned model (it remains useful for a general model).
+- Outcome skill is at the base rate: the fine-tuned top route (122 of 201) is the training majority predictor (123 of 201) to within one example. The model learned the evidence-driven behaviour, not a better predictor of outcomes.
+- Structure is much better than the general model: 99% schema-valid and 98.5% correct stage (OpenAI 77% and 68%).
+- Citations are the open weakness: 5.2% fail verification (gate 5%) and 5 point outside the supplied context (gate 0; 2, 3 and 0 per fold). Failures are mostly quotes that are not copied exactly and concentrate in the `facts` stage (8% there, 4.6% elsewhere). The verifier removes them before a lawyer sees them. A target check that rejects weak-evidence `facts` targets with citations is the proposed fix (next target generation).
+- Acceptance (not run on the folds): schema, stage and `high_is_reliable` would pass; `citations_grounded` (5.2% against 5%) and `no_foreign_cites` (5 against 0) would fail, so the verdict would stay "rejected (provisional)".
+- Cost of the session: about 9.4 hours of pod time (roughly 10 USD): training 74, 88 and about 135 minutes (dev3 lost 20 minutes and was resumed from step 80), answer generation about 70 minutes per fold. See docs/06.
+
 ## Acceptance criteria (agreed 2026-11-14) [ml.8] (ADR 0021)
 
 Specified in `eval/acceptance.yaml`, checked by `scripts/pipeline.sh accept` (`accept_check`). Acceptance is **provisional**: no lawyer review is performed in this PoC, and 48 held-out examples are too few for outcome accuracy. Thresholds are set by reasoning, not tuned to a result, and tighten as data grows.

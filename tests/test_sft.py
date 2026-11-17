@@ -148,3 +148,20 @@ def test_examples_without_a_target_give_no_validation_loss():
     assert with_target([prompt_only, full, prompt_only]) == [full]
     assert to_prompt_completion(full)["completion"] == [{"role": "assistant", "content": "a"}]
     assert with_target([prompt_only]) == []  # the trainer then runs without an eval set
+
+
+def test_empty_path_settings_mean_unset_and_resume_is_passed_to_the_trainer():
+    """SFT_RESUME_FROM="" (no resume) must not become the current directory."""
+    import inspect
+
+    from cles.config import Settings
+    from cles.training import train_sft
+
+    empty = Settings(_env_file=None, sft_resume_from="", eval_adapter="", dataset_dir="")
+    assert (
+        empty.sft_resume_from is None and empty.eval_adapter is None and empty.dataset_dir is None
+    )
+    set_ = Settings(_env_file=None, sft_resume_from="artifacts/runs/x/checkpoints/checkpoint-80")
+    assert str(set_.sft_resume_from).endswith("checkpoint-80")
+    assert "resume_from_checkpoint" in inspect.getsource(train_sft._train)
+    assert "save_total_limit" in inspect.getsource(train_sft._trainer_args)

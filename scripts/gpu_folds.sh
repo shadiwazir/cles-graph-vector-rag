@@ -35,8 +35,12 @@ for fold in "$@"; do
   if [[ ! -s "$adapter_file" ]]; then
     echo "$(date +%H:%M:%S) training $fold"
     # Fold adapters go to their own registry name, not to the product's cles-advisor model.
+    # A run cut off by a full disk or a restart continues from a checkpoint named in
+    # /workspace/runs/resume-<fold>.txt (the path of a complete checkpoint folder).
+    resume=""
+    [[ -s "/workspace/runs/resume-$fold.txt" ]] && resume="$(cat "/workspace/runs/resume-$fold.txt")"
     DATASET_DIR="$dir" SFT_CONFIG=configs/sft/qwen3_8b_poc.yaml MLFLOW_REGISTERED_MODEL=cles-advisor-folds \
-      cles run train_sft > "/workspace/runs/train-$fold.log" 2> "/workspace/runs/train-$fold.err" \
+      SFT_RESUME_FROM="$resume" cles run train_sft > "/workspace/runs/train-$fold.log" 2> "/workspace/runs/train-$fold.err" \
       || fail "training $fold (see /workspace/runs/train-$fold.err)"
     tail -1 "/workspace/runs/train-$fold.log" \
       | python3 -c 'import json,sys; print(json.load(sys.stdin)["adapter"])' > "$adapter_file" \

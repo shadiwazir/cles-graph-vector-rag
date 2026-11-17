@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     evidence_weak_distance: float = 0.45
 
     sft_config: Path = Path("configs/sft/qwen3_8b_qlora.yaml")
+    sft_resume_from: Path | None = None  # continue training from this checkpoint folder
     conversation_history_tokens: int = 1500  # budget for earlier turns folded into the case text
     # Model evaluation (stages eval_generate and eval_score)
     eval_system: str = "openai"  # which entry of eval_systems_file to generate with
@@ -141,6 +142,12 @@ class Settings(BaseSettings):
     def neo4j_auth(self) -> tuple[str, str]:
         """(user, password) for the Neo4j driver. Fails if the password is not set."""
         return self.neo4j_user, _require(self.neo4j_password, "NEO4J_PASSWORD")
+
+    @field_validator("sft_resume_from", "eval_adapter", "dataset_dir", mode="before")
+    @classmethod
+    def _empty_path_is_unset(cls, value):
+        """An empty environment variable means "not set", not the current directory."""
+        return None if value in ("", None) else value
 
 
 def _require(secret: SecretStr | None, name: str) -> str:

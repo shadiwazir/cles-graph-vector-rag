@@ -165,6 +165,7 @@ def _trainer_args(cfg: SftConfig, out: Path, has_eval: bool):
         eval_strategy="steps" if has_eval else "no",
         eval_steps=cfg.eval_steps,
         save_steps=cfg.save_steps,
+        save_total_limit=cfg.save_total_limit,
         max_length=cfg.max_seq_length,
         bf16=cfg.bf16,
         seed=cfg.seed,
@@ -203,7 +204,12 @@ def _train(cfg, settings: Settings, train, eval_set, manifest, folder: Path, run
     with mlflow.start_run(run_name=f"{cfg.name}-{run_id[:8]}") as active:
         mlflow.log_params(cfg.params())
         mlflow.set_tags(_lineage(cfg, manifest, folder))
-        result = trainer.train()
+        # a run cut off by a full disk or a restart continues from a saved checkpoint
+        result = trainer.train(
+            resume_from_checkpoint=str(settings.sft_resume_from)
+            if settings.sft_resume_from
+            else None
+        )
         adapter = out / "adapter"
         trainer.model.save_pretrained(adapter)
         tokenizer.save_pretrained(adapter)

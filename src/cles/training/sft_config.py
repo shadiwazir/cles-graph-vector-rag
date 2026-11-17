@@ -48,6 +48,7 @@ class SftConfig(BaseModel):
     logging_steps: int = 10
     eval_steps: int = 250
     save_steps: int = 250
+    save_total_limit: int = 2  # keep only the newest checkpoints (each is about 1 GB on the volume)
     eval_max_examples: int = 200
     train_max_examples: int | None = None
     seed: int = 3407

@@ -49,6 +49,23 @@ Needs a GPU pod in the same region as the volume (the adapter is on the volume).
    `EVAL_SYSTEM=finetuned_served LLM_BASE_URL=http://localhost:8001/v1 LLM_MODEL=cles LLM_EXTRA_BODY='{"chat_template_kwargs":{"enable_thinking":false}}' uv run cles run eval_generate` then `uv run cles run eval_score`. The `served` backend decodes like the `hf` one (temperature 0, no JSON mode, same token limit), so a difference in the scores comes from the 16-bit weights, not from the settings.
 6. Stop the pod when done; the volume keeps the model cache and the venv.
 
+## Training one adapter per fold (rolling folds, ADR 0023) [ml.9]
+
+`scripts/gpu_setup.sh push-folds root@<ip> <port> <folds-dir>` copies the code and the dev folds (never the locked test fold), `scripts/gpu_setup.sh folds <folds-dir> dev1 dev2 dev3` starts `scripts/gpu_folds.sh` on the pod: for each fold it trains an adapter, then generates the fold's answers with it (`EVAL_ADAPTER`), stopping at the first failure; `pull-folds` fetches the answers and the MLflow file; score on the laptop (`eval_score` per fold with `DATASET_DIR`, `EVAL_OUT_DIR=<fold>/eval`, then `folds_report`). Fold adapters are registered as `cles-advisor-folds`; import the MLflow file without `--register` (the pipeline step would register them as versions of the product model).
+
+Measured on an L40S (session of 2026-11-17, new targets with graph facts and the precedent line, mean prompt 7.4k tokens):
+
+| step | dev1 (753 examples) | dev2 (885) | dev3 (1028) |
+|------|---------------------|------------|-------------|
+| training | 74 min (96 steps, 43 to 46 s each) | 88 min (112 steps) | 100 min (130 steps) |
+| answer generation (Hugging Face, batch 4, 2000 new tokens) | 69 min | 72 min | 66 min |
+
+- Answer generation costs as much as training: about 0.5 minutes per example with the 4-bit Hugging Face backend. My first estimate (15 minutes per fold) was wrong by a factor of four. vLLM or a larger batch (8 fits in 46 GB; 12 does not at these prompt lengths) would be faster; not done.
+- The whole session was about 9.4 hours of pod time (about 10 USD), against an estimate of 6 USD.
+- The volume filled up: every training run keeps a checkpoint every 20 steps (about 1 GB each), the model caches and environments take about 59 GB, and the 75 GB volume ran out while dev3 saved its step-100 checkpoint (a 0-byte `scheduler.pt`); the pod restarted afterwards and the driver died without an exit marker. Training now keeps the 2 newest checkpoints (`save_total_limit`), and a cut-off run can continue from a complete checkpoint (`SFT_RESUME_FROM`, or `/workspace/runs/resume-<fold>.txt` for the driver): dev3 resumed at step 80 and needed 37 minutes instead of 100. Check `du -sh /workspace/*` before a long run and delete the checkpoints of finished runs (their final adapter is separate).
+- A wait that polls the pod over ssh reports "unreachable" after a few failed attempts even when the pod is fine; look at the pod before assuming it is down.
+- The agent cannot stop the pod: the key RunPod injects into the pod is rejected for account calls and using it was blocked, so stop the pod from the console when the results are pulled (the volume is kept).
+
 ## Budget estimate for the real corpus (10,000 decisions)
 
 Scaled linearly from the 15-decision sample, at unverified OpenAI prices and an assumed GPU throughput. All figures are rough; the pilot step replaces the throughput assumption.
